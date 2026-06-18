@@ -1,0 +1,6 @@
+.env
+venv/
+int/
+raw_data/
+similarities/
+
