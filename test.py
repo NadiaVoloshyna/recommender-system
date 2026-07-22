@@ -1,16 +1,18 @@
 import pandas as pd
-from unittest.mock import patch, Mock
-from lastfm_data_ingestion import call_lastfm
-from utils import make_id
-from seeds import create_seeds
 import os
 import requests
+import json
+from unittest.mock import patch, Mock
+from lastfm_data_ingestion import call_lastfm
+from lastfm_data_ingestion import store_user_data
+from seeds import create_seeds
+from utils import make_id
 
 BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 API_KEY = os.getenv("API_KEY")
 
 
-# Check if the request is constructed correctly
+# Check if call_lastfm() constructs the request correctly
 @patch("lastfm_data_ingestion.requests.get")
 def test_call_lastfm_builds_request(mock_get):
     response = Mock()
@@ -33,7 +35,7 @@ def test_call_lastfm_builds_request(mock_get):
     )
 
 
-# Check the retry logic, simulating two failures followed by success
+# Check call_lastfm() retry logic, simulating two failures followed by success
 @patch("lastfm_data_ingestion.requests.get")
 def test_call_lastfm_succeeds_after_retry(mock_get):
     failed = Mock()
@@ -61,7 +63,7 @@ def test_call_lastfm_succeeds_after_retry(mock_get):
     assert mock_get.call_count == 3
 
 
-# Check if returns None if all retry attempts fail
+# Check if call_lastfm() returns None if all retry attempts fail
 @ patch("lastfm_data_ingestion.requests.get")
 def test_call_lastfm_returns_none_after_retries(mock_get):
     mock_response = Mock()
@@ -74,12 +76,85 @@ def test_call_lastfm_returns_none_after_retries(mock_get):
     assert mock_get.call_count == 3
 
 
-def test_make_id_is_deterministic():
-    assert make_id("Radiohead", "artist") == make_id("Radiohead", "artist"), "make_id should return the same value for identical inputs"
+# Test if store_user_data() saves successful API responses
+@patch("lastfm_data_ingestion.call_lastfm")
+def test_store_user_data_saves_json(mock_call_lastfm, tmp_path):
+    mock_call_lastfm.return_value = {
+        "topartists": {
+        "artist": [
+            {"name": "Nirvana"}
+        ]
+    }
+    }
+
+    store_user_data(
+        user="NadiaV26",
+        methods=["user.getTopArtists"],
+        base_path=tmp_path
+    )
+
+    file_path = tmp_path / "NadiaV26" / "user.getTopArtists.json"
+
+    assert file_path.exists()
+
+    with open(file_path) as f:
+        saved_data = json.load(f)
+
+    assert saved_data == {
+        "topartists": {
+        "artist": [
+            {"name": "Nirvana"}
+        ]
+    }
+    }
 
 
-def test_make_id_differs_for_prefixes():
-    assert make_id("Radiohead", "artist") != make_id("Radiohead", "track"), "ids should differ when prefixes differ"
+# Check if store_user_data() skips failed API calls
+@patch("lastfm_data_ingestion.call_lastfm")
+def test_store_user_data_skips_failed_requests(mock_call_lastfm, tmp_path):
+    mock_call_lastfm.return_value = None
+
+    store_user_data(
+        user="NadiaV26",
+        methods=["user.getTopArtists"],
+        base_path=tmp_path
+    )
+
+    file_path = tmp_path / "NadiaV26" / "user.getTopArtists.json"
+
+    assert not file_path.exists()
+
+
+# Check if store_user_data() continues after an unexpected error
+@patch("lastfm_data_ingestion.call_lastfm")
+def test_store_user_data_continues_after_error(mock_call_lastfm, tmp_path):
+    mock_call_lastfm.side_effect = [
+        Exception("API error"),
+        {
+            "topartists": {
+                "artist": [
+                    {"name": "Nirvana"}
+                ]
+            }
+        }
+    ]
+
+    store_user_data(
+        user="NadiaV26",
+        methods=[
+            "bad.method",
+            "user.getTopArtists"
+        ],
+        base_path=tmp_path
+    )
+
+    good_file = (
+        tmp_path /
+        "NadiaV26" /
+        "user.getTopArtists.json"
+    )
+
+    assert good_file.exists()
 
 
 def test_create_seeds():
@@ -130,4 +205,12 @@ def test_create_seeds():
         "1b0904879cf52adc6192f8db596dedcc85a98d022baed4561130faf682571132",
         "3c6c6b248084a76e34d03d5040c9e069a161033203dec1977d17c7f9d24f31a8",
     }
+
+
+def test_make_id_is_deterministic():
+    assert make_id("Radiohead", "artist") == make_id("Radiohead", "artist"), "make_id should return the same value for identical inputs"
+
+
+def test_make_id_differs_for_prefixes():
+    assert make_id("Radiohead", "artist") != make_id("Radiohead", "track"), "ids should differ when prefixes differ"
 

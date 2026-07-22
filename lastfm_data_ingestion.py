@@ -56,9 +56,14 @@ def call_lastfm(
     return None
 
 
-# User data ingestion
-def store_user_data(user, methods, base_path="raw_data"):
-    # Create user directory
+def store_user_data(user: str, methods: list, base_path: str = "raw_data"):
+    """
+    Creates a folder for the user, loops through each API method, fetches data, skips failed requests,
+    creates a filename, creates the full file path, save JSON data, handles unexpected errors.
+    :param user: Last.fm username (str)
+    :param methods: list of API methods (list)
+    :param base_path: folder to store data (str)
+    """
     user_path = os.path.join(base_path, user)
     os.makedirs(user_path, exist_ok=True)
 
@@ -76,8 +81,6 @@ def store_user_data(user, methods, base_path="raw_data"):
 
         except Exception as e:
             print(f"Error fetching {method} for {user}: {e}")
-
-    return
 
 
 # Similarity data ingestion
