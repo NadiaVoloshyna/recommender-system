@@ -10,7 +10,25 @@ BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 API_KEY = os.getenv("API_KEY")
 
 
-def call_lastfm(method, user=None, track=None, artist=None, limit=50, retries=3):
+def call_lastfm(
+        method: str,
+        user: str = None,
+        track: str = None,
+        artist: str = None,
+        limit: int = 50,
+        retries: int = 3
+) -> dict | None:
+    """
+    Creates the request parameters, adds optional parameters, sends the API request, checks for errors,
+    retries if the request fails.
+    :param method: Last.fm API method to call (e.g., "user.getTopTracks")(str)
+    :param user: Last.fm username for user-specific requests (str, optional)
+    :param track: track name for track-related requests (str, optional)
+    :param artist: artist name for artist-related requests (str, optional)
+    :param limit: maximum number of results to return, defaults 50 (int, optional)
+    :param retries: number of retry attempts if the request fails, defaults 3 (int, optional)
+    :return: parsed JSON response if successful (dict), none if all retry attempts fail
+    """
     params = {
         "method": method,
         "limit": limit,

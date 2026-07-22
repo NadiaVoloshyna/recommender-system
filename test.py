@@ -1,8 +1,77 @@
 import pandas as pd
-from main import run_pipeline
-from unittest.mock import patch
+from unittest.mock import patch, Mock
+from lastfm_data_ingestion import call_lastfm
 from utils import make_id
 from seeds import create_seeds
+import os
+import requests
+
+BASE_URL = "https://ws.audioscrobbler.com/2.0/"
+API_KEY = os.getenv("API_KEY")
+
+
+# Check if the request is constructed correctly
+@patch("lastfm_data_ingestion.requests.get")
+def test_call_lastfm_builds_request(mock_get):
+    response = Mock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = {}
+    mock_get.return_value = response
+
+    call_lastfm("user.getRecentTracks", user="NadiaV26")
+
+    mock_get.assert_called_once_with(
+        BASE_URL,
+        params={
+            "method": "user.getRecentTracks",
+            "limit": 50,
+            "api_key": API_KEY,
+            "format": "json",
+            "user": "NadiaV26"
+        },
+        timeout=10
+    )
+
+
+# Check the retry logic, simulating two failures followed by success
+@patch("lastfm_data_ingestion.requests.get")
+def test_call_lastfm_succeeds_after_retry(mock_get):
+    failed = Mock()
+    failed.raise_for_status.side_effect = requests.HTTPError()
+    success = Mock()
+    success.raise_for_status.return_value = None
+    success.json.return_value = {
+        "topartists": {
+        "artist": [
+            {"name": "Nirvana"}
+        ]
+    }
+    }
+    mock_get.side_effect = [failed, failed, success]
+
+    result = call_lastfm("user.getTopArtists", user="NadiaV26")
+
+    assert result == {
+        "topartists": {
+        "artist": [
+            {"name": "Nirvana"}
+        ]
+    }
+    }
+    assert mock_get.call_count == 3
+
+
+# Check if returns None if all retry attempts fail
+@ patch("lastfm_data_ingestion.requests.get")
+def test_call_lastfm_returns_none_after_retries(mock_get):
+    mock_response = Mock()
+    mock_response.raise_for_status.side_effect = requests.HTTPError()
+    mock_get.return_value = mock_response
+
+    result = call_lastfm("user.getRecentTracks", user="NadiaV26")
+
+    assert result is None
+    assert mock_get.call_count == 3
 
 
 def test_make_id_is_deterministic():
@@ -61,20 +130,4 @@ def test_create_seeds():
         "1b0904879cf52adc6192f8db596dedcc85a98d022baed4561130faf682571132",
         "3c6c6b248084a76e34d03d5040c9e069a161033203dec1977d17c7f9d24f31a8",
     }
-
-# @patch("main.store_user_data")
-# def test_pipeline_calls_store_user_data(mock_store):
-#     run_pipeline()
-#     mock_store.assert_called_once()
-
-
-def main():
-    test_make_id_is_deterministic()
-    test_make_id_differs_for_prefixes()
-    test_create_seeds()
-
-
-if __name__ == "__main__":
-    main()
-
 
