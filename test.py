@@ -3,8 +3,8 @@ import os
 import requests
 import json
 from unittest.mock import patch, Mock
-from lastfm_data_ingestion import call_lastfm
-from lastfm_data_ingestion import store_user_data
+from lastfm_data_ingestion import call_lastfm, store_user_data
+from data_preprocessing import get_user_data_paths
 from seeds import create_seeds
 from utils import make_id
 
@@ -155,6 +155,47 @@ def test_store_user_data_continues_after_error(mock_call_lastfm, tmp_path):
     )
 
     assert good_file.exists()
+
+
+# Check if get_user_data_paths() finds files inside user folders
+def test_get_user_data_paths_returns_files(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+
+    file1 = user_folder / "user.getRecentTracks.json"
+    file2 = user_folder / "user.getTopArtists.json"
+
+    file1.write_text("{}")
+    file2.write_text("{}")
+
+    result = get_user_data_paths(tmp_path)
+
+    assert file1.as_posix() in [path.replace("\\", "/") for path in result]
+    assert file2.as_posix() in [path.replace("\\", "/") for path in result]
+
+
+# Check if get_user_data_paths() ignores files directly inside base folder
+def test_get_user_data_paths_ignores_files_in_base_folder(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+
+    user_file = user_folder / "user.getRecentTracks.json"
+    user_file.write_text("{}")
+
+    ignored_file = tmp_path / "README.txt"
+    ignored_file.write_text("ignore me")
+
+    result = get_user_data_paths(tmp_path)
+
+    assert str(user_file) in result
+    assert str(ignored_file) not in result
+
+
+# Check if get_user_data_paths() returns empty list when no user data exists
+def test_get_user_data_paths_returns_empty_list(tmp_path):
+    result = get_user_data_paths(tmp_path)
+
+    assert result == []
 
 
 def test_create_seeds():

@@ -1,5 +1,5 @@
 from lastfm_data_ingestion import store_user_data, store_similar_data
-from data_preprocessing import load_user_data, load_similarity_data, build_user_dataframes, build_similarity_dataframes
+from data_preprocessing import get_user_data_paths, load_similarity_data, build_user_dataframes, build_similarity_dataframes
 from ids import build_tracks_df, build_artists_df
 from seeds import create_seeds
 from map_similarity_ids import map_similarity_ids
@@ -30,7 +30,7 @@ def run_pipeline():
         store_user_data(user, METHODS_USER)
 
     # Read user JSON files and build dataframes
-    user_files = load_user_data()
+    user_files = get_user_data_paths()
     user_dataframes = build_user_dataframes(user_files)
     recent_tracks_df = user_dataframes['recent_tracks']   # track_name, artist_name, timestamp, url, user, user_id
     top_tracks_df = user_dataframes['top_tracks']         # track_name, artist_name, playcount, url, user, user_id

@@ -4,7 +4,14 @@ import pandas as pd
 from utils import make_id
 
 
-def load_user_data(base_path="raw_data"):
+def get_user_data_paths(base_path: str = "raw_data") -> list:
+    """
+    Creates an empty list, loops through folders inside raw_data, builds the full user folder path,
+    checks if it is actually a folder, loops through files inside the user folder, create full file path,
+    adds the path to the list.
+    :param base_path: folder containing stored user data (str, optional)
+    :return: a list of all files stored inside user folders (list)
+    """
     all_files = []
 
     for user_folder in os.listdir(base_path):
