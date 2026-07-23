@@ -1,6 +1,6 @@
-from lastfm_data_ingestion import store_user_data, store_similar_data
-from data_preprocessing import get_user_data_paths, load_similarity_data, build_user_dataframes, build_similarity_dataframes
-from ids import build_tracks_df, build_artists_df
+from data_ingestion import store_user_data, store_similar_data
+from data_processing import get_users_data_paths, load_similarity_data, build_user_dataframes, build_similarity_dataframes
+from global_ids import build_users_df, build_tracks_df, build_artists_df
 from seeds import create_seeds
 from map_similarity_ids import map_similarity_ids
 
@@ -25,13 +25,21 @@ METHOD_ARTIST = "artist.getSimilar"
 
 
 def run_pipeline():
-    # Pull and store user raw data
+    # Fetch and store raw user data from the API
     for user in USERS:
         store_user_data(user, METHODS_USER)
 
-    # Read user JSON files and build dataframes
-    user_files = get_user_data_paths()
-    user_dataframes = build_user_dataframes(user_files)
+    # Discover stored user files and create the users lookup table
+    users_files = get_users_data_paths()
+    users_df = build_users_df(users_files)
+    print(f"users_df:\n{users_df.head().to_string()}\n\n")
+    user_lookup = dict(zip(
+        users_df["username"],
+        users_df["user_id"]
+    ))
+
+    # Load user JSON files and transform them into DataFrames
+    user_dataframes = build_user_dataframes(users_files, user_lookup)
     recent_tracks_df = user_dataframes['recent_tracks']   # track_name, artist_name, timestamp, url, user, user_id
     top_tracks_df = user_dataframes['top_tracks']         # track_name, artist_name, playcount, url, user, user_id
     top_artists_df = user_dataframes['top_artists']       # artist_name, playcount, url, user, user_id

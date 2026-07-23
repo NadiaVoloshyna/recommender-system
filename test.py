@@ -3,8 +3,9 @@ import os
 import requests
 import json
 from unittest.mock import patch, Mock
-from lastfm_data_ingestion import call_lastfm, store_user_data
-from data_preprocessing import get_user_data_paths
+from data_ingestion import call_lastfm, store_user_data
+from data_processing import get_users_data_paths
+from global_ids import build_users_df
 from seeds import create_seeds
 from utils import make_id
 
@@ -12,8 +13,8 @@ BASE_URL = "https://ws.audioscrobbler.com/2.0/"
 API_KEY = os.getenv("API_KEY")
 
 
-# Check if call_lastfm() constructs the request correctly
-@patch("lastfm_data_ingestion.requests.get")
+# call_lastfm() constructs the request correctly
+@patch("data_ingestion.requests.get")
 def test_call_lastfm_builds_request(mock_get):
     response = Mock()
     response.raise_for_status.return_value = None
@@ -36,7 +37,7 @@ def test_call_lastfm_builds_request(mock_get):
 
 
 # Check call_lastfm() retry logic, simulating two failures followed by success
-@patch("lastfm_data_ingestion.requests.get")
+@patch("data_ingestion.requests.get")
 def test_call_lastfm_succeeds_after_retry(mock_get):
     failed = Mock()
     failed.raise_for_status.side_effect = requests.HTTPError()
@@ -63,8 +64,8 @@ def test_call_lastfm_succeeds_after_retry(mock_get):
     assert mock_get.call_count == 3
 
 
-# Check if call_lastfm() returns None if all retry attempts fail
-@ patch("lastfm_data_ingestion.requests.get")
+# call_lastfm() returns None if all retry attempts fail
+@ patch("data_ingestion.requests.get")
 def test_call_lastfm_returns_none_after_retries(mock_get):
     mock_response = Mock()
     mock_response.raise_for_status.side_effect = requests.HTTPError()
@@ -76,8 +77,8 @@ def test_call_lastfm_returns_none_after_retries(mock_get):
     assert mock_get.call_count == 3
 
 
-# Test if store_user_data() saves successful API responses
-@patch("lastfm_data_ingestion.call_lastfm")
+# store_user_data() saves successful API responses
+@patch("data_ingestion.call_lastfm")
 def test_store_user_data_saves_json(mock_call_lastfm, tmp_path):
     mock_call_lastfm.return_value = {
         "topartists": {
@@ -109,8 +110,8 @@ def test_store_user_data_saves_json(mock_call_lastfm, tmp_path):
     }
 
 
-# Check if store_user_data() skips failed API calls
-@patch("lastfm_data_ingestion.call_lastfm")
+# store_user_data() skips failed API calls
+@patch("data_ingestion.call_lastfm")
 def test_store_user_data_skips_failed_requests(mock_call_lastfm, tmp_path):
     mock_call_lastfm.return_value = None
 
@@ -125,8 +126,8 @@ def test_store_user_data_skips_failed_requests(mock_call_lastfm, tmp_path):
     assert not file_path.exists()
 
 
-# Check if store_user_data() continues after an unexpected error
-@patch("lastfm_data_ingestion.call_lastfm")
+# store_user_data() continues after an unexpected error
+@patch("data_ingestion.call_lastfm")
 def test_store_user_data_continues_after_error(mock_call_lastfm, tmp_path):
     mock_call_lastfm.side_effect = [
         Exception("API error"),
@@ -157,7 +158,7 @@ def test_store_user_data_continues_after_error(mock_call_lastfm, tmp_path):
     assert good_file.exists()
 
 
-# Check if get_user_data_paths() finds files inside user folders
+# get_user_data_paths() finds files inside user folders
 def test_get_user_data_paths_returns_files(tmp_path):
     user_folder = tmp_path / "NadiaV26"
     user_folder.mkdir()
@@ -168,13 +169,13 @@ def test_get_user_data_paths_returns_files(tmp_path):
     file1.write_text("{}")
     file2.write_text("{}")
 
-    result = get_user_data_paths(tmp_path)
+    result = get_users_data_paths(tmp_path)
 
     assert file1.as_posix() in [path.replace("\\", "/") for path in result]
     assert file2.as_posix() in [path.replace("\\", "/") for path in result]
 
 
-# Check if get_user_data_paths() ignores files directly inside base folder
+# get_user_data_paths() ignores files directly inside base folder
 def test_get_user_data_paths_ignores_files_in_base_folder(tmp_path):
     user_folder = tmp_path / "NadiaV26"
     user_folder.mkdir()
@@ -185,17 +186,89 @@ def test_get_user_data_paths_ignores_files_in_base_folder(tmp_path):
     ignored_file = tmp_path / "README.txt"
     ignored_file.write_text("ignore me")
 
-    result = get_user_data_paths(tmp_path)
+    result = get_users_data_paths(tmp_path)
 
     assert str(user_file) in result
     assert str(ignored_file) not in result
 
 
-# Check if get_user_data_paths() returns empty list when no user data exists
+# get_user_data_paths() returns empty list when no user data exists
 def test_get_user_data_paths_returns_empty_list(tmp_path):
-    result = get_user_data_paths(tmp_path)
+    result = get_users_data_paths(tmp_path)
 
     assert result == []
+
+
+# Check that valid file paths produce the expected DataFrame in build_users_df()
+def test_build_users_df_creates_dataframe():
+    users_files = [
+        "/raw_data/alice/file1.json",
+        "/raw_data/bob/file2.json"
+    ]
+
+    result = build_users_df(users_files)
+
+    assert isinstance(result, pd.DataFrame)
+    assert list(result.columns) == ["user_id", "username"]
+    assert len(result) == 2
+
+
+# build_users_df() removes users duplicates users
+def test_build_users_df_removes_duplicate_users():
+    users_files = [
+        "/raw_data/alice/file1.json",
+        "/raw_data/alice/file2.json",
+        "/raw_data/bob/file1.json"
+    ]
+
+    result = build_users_df(users_files)
+
+    assert len(result) == 2
+    assert set(result["username"]) == {"alice", "bob"}
+
+
+# Usernames are sorted in build_users_df()
+def test_build_users_df_sorts_users():
+    users_files = [
+        "/raw_data/charlie/file.json",
+        "/raw_data/alice/file.json",
+        "/raw_data/bob/file.json"
+    ]
+
+    result = build_users_df(users_files)
+
+    assert list(result["username"]) == [
+        "alice",
+        "bob",
+        "charlie"
+    ]
+
+
+# User IDs are generated in build_users_df()
+def test_build_users_df_generates_ids(mocker):
+    mocker.patch(
+        "global_ids.make_id",
+        return_value="user_123"
+    )
+
+    result = build_users_df(["/raw_data/alice/file.json"])
+
+    assert result.iloc[0]["user_id"] == "user_123"
+
+
+# An empty list should return an empty DataFrame in build_users_df()
+def test_build_users_df_empty_input():
+    result = build_users_df([])
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.empty
+    assert list(result.columns) == []
+
+
+
+
+
+
 
 
 def test_create_seeds():

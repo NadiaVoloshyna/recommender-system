@@ -4,7 +4,7 @@ import pandas as pd
 from utils import make_id
 
 
-def get_user_data_paths(base_path: str = "raw_data") -> list:
+def get_users_data_paths(base_path: str = "raw_data") -> list:
     """
     Creates an empty list, loops through folders inside raw_data, builds the full user folder path,
     checks if it is actually a folder, loops through files inside the user folder, create full file path,
@@ -26,28 +26,17 @@ def get_user_data_paths(base_path: str = "raw_data") -> list:
     return all_files
 
 
-def load_similarity_data(base_path):
-    all_files = []
-
-    for file in os.listdir(base_path):
-        file_path = os.path.join(base_path, file)
-        all_files.append(file_path)
-
-    return all_files
-
-
-def build_user_dataframes(saved_files):
-    dfs = {}
-    user_ids = {}
+def build_user_dataframes(saved_files, user_lookup):
+    df_groups = {
+        "recent_tracks": [],
+        "top_tracks": [],
+        "top_artists": []
+    }
 
     for file_path in saved_files:
         name = os.path.splitext(os.path.basename(file_path))[0]
-        user = file_path.split(os.sep)[-2]
-        if user in user_ids:
-            user_id = user_ids[user]
-        else:
-            user_id = make_id(user, "user")
-            user_ids[user] = user_id
+        user = os.path.basename(os.path.dirname(file_path))
+        user_id = user_lookup[user]
 
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -67,7 +56,6 @@ def build_user_dataframes(saved_files):
                     artist_name = artist
                 else:
                     artist_name = None
-
                 rows.append({
                     "artist_name": artist_name,
                     "track_name": t.get("name"),
@@ -76,21 +64,16 @@ def build_user_dataframes(saved_files):
                 })
             df = pd.DataFrame(rows)
 
-            # Filter invalid rows
             df = df[
                 df["artist_name"].notna() &
                 df["track_name"].notna() &
                 (df["artist_name"].str.len() > 0) &
                 (df["track_name"].str.len() > 0)
                 ]
-
-            # Enforce schema
             df = df.reindex(columns=["track_name", "artist_name", "timestamp", "url"])
-
-            # Add metadata
             df = df.assign(user=user, user_id=user_id)
 
-            dfs.setdefault("recent_tracks", []).append(df)
+            df_groups["recent_tracks"].append(df)
 
         elif name == "user.getTopTracks":
             top_tracks = data.get("toptracks", {}).get("track", [])
@@ -99,24 +82,17 @@ def build_user_dataframes(saved_files):
 
             df = pd.json_normalize(top_tracks)
 
-            # Rename raw API fields
             df = df.rename(columns={"artist.name": "artist_name", "name": "track_name"})
-
-            # Filter invalid rows
             df = df[
                 df["artist_name"].notna() &
                 df["track_name"].notna() &
                 (df["artist_name"].str.len() > 0) &
                 (df["track_name"].str.len() > 0)
             ]
-
-            # Enforce schema
             df = df.reindex(columns=["track_name", "artist_name", "playcount", "url"])
-
-            # Add metadata
             df = df.assign(user=user, user_id=user_id)
 
-            dfs.setdefault("top_tracks", []).append(df)
+            df_groups["top_tracks"].append(df)
 
         elif name == "user.getTopArtists":
             top_artists = data.get("topartists", {}).get("artist", [])
@@ -127,24 +103,32 @@ def build_user_dataframes(saved_files):
 
             # Rename raw API fields
             df = df.rename(columns={"name": "artist_name"})
-
             # Filter invalid rows
             df = df[df["artist_name"].notna() & (df["artist_name"].str.len() > 0)]
-
             # Enforce schema
             df = df.reindex(columns=["artist_name", "playcount", "url"])
-
             # Add metadata
             df = df.assign(user=user, user_id=user_id)
 
-            dfs.setdefault("top_artists", []).append(df)
+            df_groups["top_artists"].append(df)
 
     # Combine all users
-    result = {}
-    for key, df_list in dfs.items():
-        result[key] = pd.concat(df_list, ignore_index=True)
+    result = {
+        key: pd.concat(df_list, ignore_index=True)
+        for key, df_list in df_groups.items()
+    }
 
     return result
+
+
+def load_similarity_data(base_path):
+    all_files = []
+
+    for file in os.listdir(base_path):
+        file_path = os.path.join(base_path, file)
+        all_files.append(file_path)
+
+    return all_files
 
 
 def build_similarity_dataframes(group, saved_files):

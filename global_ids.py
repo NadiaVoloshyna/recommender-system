@@ -1,5 +1,28 @@
 from utils import make_id
 import pandas as pd
+import os
+
+
+def build_users_df(users_files: list) -> pd.DataFrame:
+    """
+    Looks at a collection of user-related file paths, finds all unique usernames from their folder names,
+    assigns each user a generated ID, creates rows for the DataFrame, converts the list into a DataFrame.
+    :param users_files: a list of file paths (list)
+    :return: Pandas dataframe
+    """
+    users = sorted({
+        os.path.basename(os.path.dirname(path))
+        for path in users_files
+    })
+
+    rows = []
+    for user in users:
+        rows.append({
+            "user_id": make_id(user, "user"),
+            "username": user
+        })
+
+    return pd.DataFrame(rows)
 
 
 def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
