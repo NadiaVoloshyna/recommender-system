@@ -4,7 +4,7 @@ import requests
 import json
 from unittest.mock import patch, Mock
 from data_ingestion import call_lastfm, store_user_data
-from data_processing import get_users_data_paths
+from data_processing import get_users_data_paths, build_user_dataframes
 from global_ids import build_users_df
 from seeds import create_seeds
 from utils import make_id
@@ -265,10 +265,202 @@ def test_build_users_df_empty_input():
     assert list(result.columns) == []
 
 
+# Check build_user_dataframes() main extraction logic, recent tracks extraction
+def test_recent_tracks_parsing(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+    user_file = user_folder / "user.getRecentTracks.json"
+
+    data = {
+        "recenttracks": {
+            "track": [
+                {
+                    "artist": {"#text": "AC/DC"},
+                    "name": "Thunderstruck",
+                    "date": {"uts": "123456"}
+                }
+            ]
+        }
+    }
+
+    user_file.write_text(json.dumps(data))
+
+    result = build_user_dataframes(
+        [str(user_file)],
+        {"NadiaV26": 1}
+    )
+
+    df = result["recent_tracks"]
+
+    assert len(df) == 1
+    assert df.iloc[0]["user_id"] == 1
+    assert df.iloc[0]["user"] == "NadiaV26"
+    assert df.iloc[0]["track_name"] == "Thunderstruck"
+    assert df.iloc[0]["artist_name"] == "AC/DC"
+    assert df.iloc[0]["timestamp"] == "123456"
 
 
+# Check build_user_dataframes() main extraction logic, top tracks extraction, playcount conversion
+def test_top_tracks_parsing(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+    user_file = user_folder / "user.getTopTracks.json"
+
+    data = {
+        "toptracks": {
+            "track": [
+                {
+                    "name": "Back in Black",
+                    "artist": {"name": "AC/DC"},
+                    "playcount": "50"
+                }
+            ]
+        }
+    }
+
+    user_file.write_text(json.dumps(data))
+
+    result = build_user_dataframes(
+        [str(user_file)],
+        {"NadiaV26": 1}
+    )
+
+    df = result["top_tracks"]
+
+    assert len(df) == 1
+    assert df.iloc[0]["track_name"] == "Back in Black"
+    assert df.iloc[0]["artist_name"] == "AC/DC"
+    assert df.iloc[0]["playcount"] == 50
+    assert pd.api.types.is_integer_dtype(df["playcount"])
 
 
+# Check build_user_dataframes() main extraction logic, top artists parsing, rank/playcount extraction
+def test_top_artists_parsing(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+    user_file = user_folder / "user.getTopArtists.json"
+
+    data = {
+        "topartists": {
+            "artist": [
+                {
+                    "name": "AC/DC",
+                    "playcount": "100",
+                    "@attr": {"rank": "1"}
+                }
+            ]
+        }
+    }
+
+    user_file.write_text(json.dumps(data))
+
+    result = build_user_dataframes(
+        [str(user_file)],
+        {"NadiaV26": 1}
+    )
+
+    df = result["top_artists"]
+
+    assert len(df) == 1
+    assert df.iloc[0]["artist_name"] == "AC/DC"
+    assert df.iloc[0]["playcount"] == 100
+    assert df.iloc[0]["rank"] == 1
+
+
+# build_user_dataframes() removes invalid rows, data cleaning
+def test_invalid_rows_are_removed(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+    user_file = user_folder / "user.getRecentTracks.json"
+
+    data = {
+        "recenttracks": {
+            "track": [
+                {
+                    "artist": {"#text": ""},
+                    "name": "",
+                    "date": {"uts": "123456"}
+                },
+                {
+                    "artist": {"#text": "Valid Artist"},
+                    "name": "Valid Song",
+                    "date": {"uts": "123456"}
+                }
+            ]
+        }
+    }
+
+    user_file.write_text(json.dumps(data))
+
+    result = build_user_dataframes(
+        [str(user_file)],
+        {"NadiaV26": 1}
+    )
+
+    df = result["recent_tracks"]
+
+    assert len(df) == 1
+    assert df.iloc[0]["track_name"] == "Valid Song"
+
+
+# build_user_dataframes() handles empty inputs
+def test_empty_api_response_returns_empty_dataframe(tmp_path):
+    user_folder = tmp_path / "NadiaV26"
+    user_folder.mkdir()
+    user_file = user_folder / "user.getRecentTracks.json"
+
+    data = {
+        "recenttracks": {
+            "track": []
+        }
+    }
+
+    user_file.write_text(json.dumps(data))
+
+    result = build_user_dataframes(
+        [str(user_file)],
+        {"NadiaV26": 1}
+    )
+
+    assert result["recent_tracks"].empty
+
+
+# build_user_dataframes() combines multiple users
+def test_multiple_users_are_combined(tmp_path):
+    files = []
+
+    for username in ["alice", "bob"]:
+        user_folder = tmp_path / username
+        user_folder.mkdir()
+        user_file = user_folder / "user.getTopTracks.json"
+
+        data = {
+            "toptracks": {
+                "track": [
+                    {
+                        "name": f"{username} song",
+                        "artist": {"name": "Artist"},
+                        "playcount": "10"
+                    }
+                ]
+            }
+        }
+
+        user_file.write_text(json.dumps(data))
+        files.append(str(user_file))
+
+    result = build_user_dataframes(
+        files,
+        {
+            "alice": 1,
+            "bob": 2
+        }
+    )
+
+    df = result["top_tracks"]
+
+    assert len(df) == 2
+    assert set(df["user"]) == {"alice", "bob"}
 
 
 def test_create_seeds():

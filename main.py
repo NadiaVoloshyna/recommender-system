@@ -40,21 +40,21 @@ def run_pipeline():
 
     # Load user JSON files and transform them into DataFrames
     user_dataframes = build_user_dataframes(users_files, user_lookup)
-    recent_tracks_df = user_dataframes['recent_tracks']   # track_name, artist_name, timestamp, url, user, user_id
-    top_tracks_df = user_dataframes['top_tracks']         # track_name, artist_name, playcount, url, user, user_id
-    top_artists_df = user_dataframes['top_artists']       # artist_name, playcount, url, user, user_id
+    recent_tracks_df = user_dataframes['recent_tracks']
+    top_tracks_df = user_dataframes['top_tracks']
+    top_artists_df = user_dataframes['top_artists']
     print(f"recent_tracks_df:\n{recent_tracks_df.head().to_string()}\n\n")
     print(f"top_tracks_df:\n{top_tracks_df.head().to_string()}\n\n")
     print(f"top_artists_df:\n{top_artists_df.head().to_string()}\n\n")
 
     # Create global IDs
-    artists_df = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)   # artist_name, artist_id
-    tracks_df = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)         # track_name, artist_name, track_id, artist_id
+    artists_df = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+    tracks_df = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
     print(f"artists_df:\n{artists_df.head().to_string()}\n\n")
     print(f"tracks_df:\n{tracks_df.head().to_string()}\n\n")
 
     # Create seeds
-    seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df) # track_id, artist_id | list of ids
+    seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
 
     # Pull and store similarity raw data for each unique seed track/artist
     for row in seed_tracks.itertuples(index=False):
@@ -88,8 +88,8 @@ def run_pipeline():
     tracks_similarity_files = load_similarity_data("similarities/tracks")
     artists_similarity_files = load_similarity_data("similarities/artists")
 
-    tracks_similarity_df = build_similarity_dataframes("track", tracks_similarity_files)      # track_id, similar_track_name, similarity_score
-    artists_similarity_df = build_similarity_dataframes("artist", artists_similarity_files)   # artist_id, similar_artist_name, similarity_score
+    tracks_similarity_df = build_similarity_dataframes("track", tracks_similarity_files)
+    artists_similarity_df = build_similarity_dataframes("artist", artists_similarity_files)
     print(f"Similar_tracks:\n{tracks_similarity_df.head().to_string()}\n\n")
     print(f"Similar_artists:\n{artists_similarity_df.head().to_string()}\n\n")
 
