@@ -5,7 +5,7 @@ import json
 from unittest.mock import patch, Mock
 from data_ingestion import call_lastfm, store_user_data
 from data_processing import get_users_data_paths, build_user_dataframes
-from global_ids import build_users_df
+from global_ids import build_users_df, build_artists_df
 from seeds import create_seeds
 from utils import make_id
 
@@ -461,6 +461,56 @@ def test_multiple_users_are_combined(tmp_path):
 
     assert len(df) == 2
     assert set(df["user"]) == {"alice", "bob"}
+
+
+# build_artists_df builds follows the normal transformation pipeline, integration-style test
+def test_build_artists_df_full_transformation_pipeline(mocker):
+    mocker.patch(
+        "global_ids.make_id",
+        return_value="artist_123"
+    )
+    recent_tracks_df = pd.DataFrame({"artist_name": ["Coldplay", "Muse", "Coldplay", None]})
+    top_tracks_df = pd.DataFrame({"artist_name": ["Muse", "Radiohead", None]})
+    top_artists_df = pd.DataFrame({"artist_name": ["Coldplay", "Oasis"]})
+
+    result = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+
+    # All sources are combined
+    assert set(result["artist_name"]) == {
+        "Coldplay",
+        "Muse",
+        "Radiohead",
+        "Oasis",
+    }
+
+    # Duplicates are removed
+    assert len(result) == 4
+    assert result["artist_name"].is_unique
+
+    # Missing values are removed
+    assert result["artist_name"].isna().sum() == 0
+
+    # IDs are generated
+    assert (result["artist_id"] == "artist_123").all()
+
+    # Verify lookup table structure
+    assert list(result.columns) == ["artist_id", "artist_name"]
+
+
+# build_artists_df handles empty inputs
+def test_build_artists_df_empty_inputs():
+    recent_tracks_df = pd.DataFrame({"artist_name": []})
+    top_tracks_df = pd.DataFrame({"artist_name": []})
+    top_artists_df = pd.DataFrame({"artist_name": []})
+
+    result = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+
+    assert result.empty
+
+
+"""
+--------------------------------------------------------------------------------------------------------------------
+"""
 
 
 def test_create_seeds():

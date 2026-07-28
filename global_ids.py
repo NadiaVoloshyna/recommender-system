@@ -26,16 +26,34 @@ def build_users_df(users_files: list) -> pd.DataFrame:
 
 
 def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
-    artists_from_recent = recent_tracks_df["artist_name"]
-    artists_from_tracks = top_tracks_df["artist_name"]
-    artists_from_top = top_artists_df["artist_name"]
+    """
+    Extracts artist names from the artist_name columns  of the recent tracks, top tracks, and top artists dataframes.
+    Combines these Series into a single Series, removes duplicates and missing values, creates a new dataframe,
+    and generates a unique ID for each artist.
+    :param recent_tracks_df: DataFrame containing recently played tracks.
+    :param top_tracks_df: DataFrame containing users' top tracks.
+    :param top_artists_df: DataFrame containing users' top artists.
+    :return: DataFrame containing unique artist names and their generated IDs.
+    """
+    all_artists = pd.concat(
+        [
+            recent_tracks_df["artist_name"],
+            top_tracks_df["artist_name"],
+            top_artists_df["artist_name"],
+        ],
+        ignore_index=True,
+    )
 
-    all_artists = pd.concat([artists_from_top, artists_from_recent, artists_from_tracks ], ignore_index=True)
-    unique_artists = all_artists.dropna().drop_duplicates()
+    artists_df = (
+        pd.DataFrame({"artist_name": all_artists.dropna().drop_duplicates()})
+        .reset_index(drop=True)
+    )
 
-    artists_df = pd.DataFrame({"artist_name": unique_artists})
-    artists_df["artist_id"] = artists_df["artist_name"].apply(lambda x: make_id(x, "artist"))
-    artists_df = artists_df[["artist_name", "artist_id"]]
+    artists_df["artist_id"] = artists_df["artist_name"].map(
+        lambda artist: make_id(artist, "artist")
+    )
+
+    artists_df = artists_df[["artist_id", "artist_name"]]
 
     return artists_df
 
