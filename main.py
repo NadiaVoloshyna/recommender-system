@@ -78,11 +78,11 @@ def run_pipeline():
         )
 
     # Read JSON files and build similarity dataframes
-    tracks_similarity_files = load_similarity_data("similarities/tracks")
-    artists_similarity_files = load_similarity_data("similarities/artists")
+    track_similarity_files = load_similarity_data("similarities/tracks")
+    artist_similarity_files = load_similarity_data("similarities/artists")
 
-    tracks_similarity_df = build_similarity_dataframes("track", tracks_similarity_files)
-    artists_similarity_df = build_similarity_dataframes("artist", artists_similarity_files)
+    tracks_similarity_df = build_similarity_dataframes("track", track_similarity_files)
+    artists_similarity_df = build_similarity_dataframes("artist", artist_similarity_files)
     print(f"Similar_tracks:\n{tracks_similarity_df.head().to_string()}\n\n")
     print(f"Similar_artists:\n{artists_similarity_df.head().to_string()}\n\n")
 

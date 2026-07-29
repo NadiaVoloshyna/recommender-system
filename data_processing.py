@@ -138,14 +138,20 @@ def build_user_dataframes(saved_files: list, user_lookup: dict) -> dict:
     return result
 
 
-def load_similarity_data(base_path):
-    all_files = []
+def load_similarity_data(base_path: str) -> list:
+    """
+    Scans a directory and returns the paths of all stored similarity data files for later loading and processing.
+    :param base_path: directory containing stored similarity files (str)
+    :return: a list of file paths contained in the directory.
+    Returns an empty list if the directory does not exist or contains no JSON files.
+    """
+    if not os.path.exists(base_path):
+        return []
 
-    for file in os.listdir(base_path):
-        file_path = os.path.join(base_path, file)
-        all_files.append(file_path)
-
-    return all_files
+    return [
+        os.path.join(base_path, file)
+        for file in os.listdir(base_path)
+    ]
 
 
 def build_similarity_dataframes(group, saved_files):

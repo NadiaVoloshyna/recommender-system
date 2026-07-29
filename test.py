@@ -4,7 +4,7 @@ import requests
 import json
 from unittest.mock import patch, Mock
 from data_ingestion import call_lastfm, store_user_data, store_similar_data
-from data_processing import get_users_data_paths, build_user_dataframes
+from data_processing import get_users_data_paths, build_user_dataframes, load_similarity_data
 from global_ids import build_users_df, build_artists_df, build_tracks_df
 from seeds import create_seeds
 from utils import make_id
@@ -797,6 +797,35 @@ def test_store_similar_data_handles_exception(mocker, tmp_path):
     )
 
     assert list(tmp_path.iterdir()) == []
+
+
+# load_similarity_data() returns file paths
+def test_load_similarity_data_returns_files(tmp_path):
+    (tmp_path / "track_123.json").write_text("{}")
+    (tmp_path / "track_456.json").write_text("{}")
+
+    result = load_similarity_data(str(tmp_path))
+
+    assert len(result) == 2
+
+    assert str(tmp_path / "track_123.json") in result
+    assert str(tmp_path / "track_456.json") in result
+
+
+# load_similarity_data() handles missing directory
+def test_load_similarity_data_missing_directory(tmp_path):
+    missing_path = tmp_path / "does_not_exist"
+
+    result = load_similarity_data(str(missing_path))
+
+    assert result == []
+
+
+# load_similarity_data() handles empty directory
+def test_load_similarity_data_empty_directory(tmp_path):
+    result = load_similarity_data(str(tmp_path))
+
+    assert result == []
 
 
 def test_make_id_is_deterministic():
