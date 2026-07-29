@@ -5,7 +5,7 @@ import json
 from unittest.mock import patch, Mock
 from data_ingestion import call_lastfm, store_user_data
 from data_processing import get_users_data_paths, build_user_dataframes
-from global_ids import build_users_df, build_artists_df
+from global_ids import build_users_df, build_artists_df, build_tracks_df
 from seeds import create_seeds
 from utils import make_id
 
@@ -463,7 +463,7 @@ def test_multiple_users_are_combined(tmp_path):
     assert set(df["user"]) == {"alice", "bob"}
 
 
-# build_artists_df builds follows the normal transformation pipeline, integration-style test
+# build_artists_df follows the normal transformation pipeline, integration-style test
 def test_build_artists_df_full_transformation_pipeline(mocker):
     mocker.patch(
         "global_ids.make_id",
@@ -504,6 +504,61 @@ def test_build_artists_df_empty_inputs():
     top_artists_df = pd.DataFrame({"artist_name": []})
 
     result = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+
+    assert result.empty
+
+
+# build_tracks_df follows the normal transformation pipeline, integration-style test
+def test_build_artists_df_full_transformation_pipeline(mocker):
+    mocker.patch(
+        "global_ids.make_id",
+        return_value="artist_123"
+    )
+
+    recent_tracks_df = pd.DataFrame({
+        "track_name": ["Yellow", "Uprising", "Yellow", None],
+        "artist_name": ["Coldplay", "Muse", "Coldplay", "Muse"],
+    })
+    top_tracks_df = pd.DataFrame({
+        "track_name": ["Yellow", "Paranoid Android"],
+        "artist_name": ["Coldplay", "Radiohead"],
+    })
+    artists_df = pd.DataFrame({
+        "artist_name": ["Coldplay", "Muse"],
+        "artist_id": ["artist_1", "artist_2"],
+    })
+
+    result = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
+
+    # Missing values are removed
+    assert result["track_name"].isna().sum() == 0
+    assert result["artist_name"].isna().sum() == 0
+
+    # Duplicates are removed
+    assert len(result) == 2
+    assert result.duplicated(subset=["track_name", "artist_name"]).sum() == 0
+
+    # Artist IDs are attached
+    assert set(result["artist_id"]) == {"artist_1", "artist_2"}
+
+    # Tracks from known artists are retained
+    assert set(result["track_name"]) == {"Yellow", "Uprising"}
+    assert "Radiohead" not in result["artist_name"].values
+
+    # Track IDs are generated
+    assert (result["track_id"] == "track_123").all()
+
+    # Verify lookup table structure
+    assert list(result.columns) == ["track_id", "track_name", "artist_id", "artist_name"]
+
+
+# build_tracks_df handles empty inputs
+def test_build_tracks_df_empty_inputs():
+    recent_tracks_df = pd.DataFrame({"track_name": [], "artist_name": []})
+    top_tracks_df = pd.DataFrame({"track_name": [], "artist_name": []})
+    artists_df = pd.DataFrame({"artist_name": [], "artist_id": []})
+
+    result = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
 
     assert result.empty
 

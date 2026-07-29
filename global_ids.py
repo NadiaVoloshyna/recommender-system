@@ -39,7 +39,7 @@ def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
         [
             recent_tracks_df["artist_name"],
             top_tracks_df["artist_name"],
-            top_artists_df["artist_name"],
+            top_artists_df["artist_name"]
         ],
         ignore_index=True,
     )
@@ -59,17 +59,44 @@ def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
 
 
 def build_tracks_df(recent_tracks_df, top_tracks_df, artists_df):
-    tracks_from_recent = recent_tracks_df[["artist_name", "track_name"]]
-    tracks_from_top = top_tracks_df[["artist_name", "track_name"]]
+    """
+    Build a unique track lookup table.
+    Combine recent and top tracks, remove missing values and duplicates, attach artist IDs, remove tracks
+    without known artists, generate unique track IDs, and select the final columns.
+    :param recent_tracks_df: DataFrame containing recently played tracks.
+    :param top_tracks_df: DataFrame containing users' top tracks.
+    :param artists_df: DataFrame containing unique artist names and their generated IDs.
+    :return: track lookup table containing: track_id, track_name, artist_id, artist_name
+    """
+    """
+    Build a unique track lookup table.
 
-    all_tracks = pd.concat([tracks_from_recent, tracks_from_top], ignore_index=True)
-    unique_tracks = all_tracks.dropna().drop_duplicates()
+    Combine recent and top tracks, remove missing values and duplicates,
+    attach artist IDs, remove tracks without known artists, generate unique
+    track IDs, and select the final columns.
+    """
+    all_tracks = pd.concat(
+        [
+            recent_tracks_df[["track_name", "artist_name"]],
+            top_tracks_df[["track_name", "artist_name"]]
+        ],
+        ignore_index=True,
+    )
 
-    # Join with artists_df to get artist_id
-    tracks_df = unique_tracks.merge(artists_df, on="artist_name", how="left")
-    tracks_df = tracks_df.dropna(subset=["artist_id"])  # handling for failed joins
+    tracks_df = (
+        all_tracks
+        .dropna(subset=["track_name", "artist_name"])
+        .drop_duplicates()
+        .merge(artists_df, on="artist_name", how="left", validate="many_to_one")
+        .dropna(subset=["artist_id"])
+        .reset_index(drop=True)
+    )
 
-    tracks_df["track_id"] = tracks_df["track_name"].apply(lambda x: make_id(x, "track"))
-    tracks_df = tracks_df[["track_name", "artist_name", "track_id", "artist_id"]]
+    # Generate unique track IDs
+    tracks_df["track_id"] = [
+        make_id(f"{artist}_{track}", "track")
+        for artist, track in zip(tracks_df["artist_name"], tracks_df["track_name"])
+    ]
 
-    return tracks_df
+    return tracks_df[["track_id", "track_name", "artist_id", "artist_name"]]
+
