@@ -509,10 +509,10 @@ def test_build_artists_df_empty_inputs():
 
 
 # build_tracks_df follows the normal transformation pipeline, integration-style test
-def test_build_artists_df_full_transformation_pipeline(mocker):
+def test_build_tracks_df_full_transformation_pipeline(mocker):
     mocker.patch(
         "global_ids.make_id",
-        return_value="artist_123"
+        return_value="track_123"
     )
 
     recent_tracks_df = pd.DataFrame({
