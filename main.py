@@ -57,31 +57,24 @@ def run_pipeline():
     seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
 
     # Pull and store similarity raw data for each unique seed track/artist
-    for row in seed_tracks.itertuples(index=False):
-        track_id = row.track_id
-        artist_id = row.artist_id
-
-        track_name = tracks_df.loc[tracks_df["track_id"] == track_id, "track_name"].iloc[0]
-        artist_name = artists_df.loc[artists_df["artist_id"] == artist_id, "artist_name"].iloc[0]
-
+    for _, row in seed_tracks.iterrows():
         store_similar_data(
-            item_id=track_id,
-            artist_name=artist_name,
+            item_id=row.track_id,
+            artist_name=row.artist_name,
+            track_name=row.track_name,
             category="track",
             method=METHOD_TRACK,
-            base_path="similarities/tracks",
-            track_name=track_name
+            base_path="similarities/tracks"
         )
 
-    for artist_id in seed_artists:
-        artist_name = artists_df.loc[artists_df["artist_id"] == artist_id, "artist_name"].iloc[0]
+    for _, row in seed_artists.iterrows():
         store_similar_data(
-            item_id=artist_id,
-            artist_name=artist_name,
+            item_id=row.artist_id,
+            artist_name=row.artist_name,
+            track_name=None,
             category="artist",
             method=METHOD_ARTIST,
-            base_path="similarities/artists",
-            track_name=None
+            base_path="similarities/artists"
         )
 
     # Read JSON files and build similarity dataframes

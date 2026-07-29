@@ -563,59 +563,114 @@ def test_build_tracks_df_empty_inputs():
     assert result.empty
 
 
-"""
---------------------------------------------------------------------------------------------------------------------
-"""
-
-
-def test_create_seeds():
-    top_tracks_df = pd.DataFrame({  # track_name, artist_name, playcount, url, user, user_id
-        "track_name": ["Lovefool", "Invisible", "the man who sold the world - live", "Snake Eater", "Everlong"],
-        "artist_name": ["The Cardigans", "Duran Duran", "Nirvana", "Cynthia Harrell", "Foo Fighters"],
-        "playcount": [116, 12, 11, 9, 9],
-        "user_id": ["42b06c7e091d4ca58e14929a4f8b315b16c9559c29d0615b7b22e192bad8dd54"] * 5
-    })
-    top_artists_df = pd.DataFrame({  # artist_name, playcount, url, user, user_id
-        "artist_name": ["The Cardigans", "The Weeknd", "Nirvana", "Kevin Sherwood", "Fall Out Boy"],
-        "playcount": [116, 108, 84, 42, 25],
-        "user_id": ["42b06c7e091d4ca58e14929a4f8b315b16c9559c29d0615b7b22e192bad8dd54"] * 5
-    })
-    tracks_df = pd.DataFrame({  # track_name, artist_name, track_id, artist_id
-        "track_name": ["Heart-Shaped Box", "Somebody Told Me", "Sweet Child o' Mine", "Fortunate Son", "Snake Eater"],
-        "artist_name": ["Nirvana", "The Killers", "Guns N' Roses", "Creedence Clearwater Revival", "Cynthia Harrell"],
-        "track_id": ["a", "ab", "abc", "abcd", "abcde"],
-        "artist_id": ["1", "12", "123", "1234", "12345"]
-    })
-    artists_df = pd.DataFrame({        # artist_name, artist_id
-        "artist_name": ["The Cardigans", "The Weeknd", "Nirvana", "Kevin Sherwood", "Fall Out Boy"],
-        "artist_id": [
-            "3fb3d8fa99488c491008d555baa494ad3722a939e1ec66e66b9010ce7db5d1ea",
-            "82cd882e512362280247750e52ff46b1e8be2064f0a2668f5838573e2c042dea",
-            "5384b648be9b9e12333c4d2ebc49ab51ad049a15fa6623ea1884e9a25014f219",
-            "1b0904879cf52adc6192f8db596dedcc85a98d022baed4561130faf682571132",
-            "3c6c6b248084a76e34d03d5040c9e069a161033203dec1977d17c7f9d24f31a8"
-        ]
+# create_seeds() follows the normal transformation pipeline, integration-style test
+def test_create_seeds_full_transformation_pipeline():
+    top_tracks_df = pd.DataFrame({
+        "user_id": ["user_1", "user_1", "user_1", "user_2"],
+        "track_name": ["Song A", "Song B", "Song A", "Song C"],
+        "artist_name": ["Artist A", "Artist B", "Artist A", "Artist C"],
+        "playcount": [100, 50, 100, 75],
     })
 
-    unique_track_ids, unique_artist_ids = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
+    top_artists_df = pd.DataFrame({
+        "user_id": ["user_1", "user_1", "user_2"],
+        "artist_name": ["Artist A", "Artist B", "Artist C"],
+        "playcount": [200, 150, 100],
+    })
 
-    # Unmatched tracks are removed after the merge.
-    assert len(unique_track_ids) == 1
+    tracks_df = pd.DataFrame({
+        "track_id": ["track_1", "track_2", "track_3"],
+        "track_name": ["Song A", "Song B", "Song C"],
+        "artist_id": ["artist_1", "artist_2", "artist_3"],
+        "artist_name": ["Artist A", "Artist B", "Artist C"],
+    })
 
-    row = unique_track_ids.iloc[0]
-    assert row["track_id"] == "abcde"
-    assert row["artist_id"] == "12345"
+    artists_df = pd.DataFrame({
+        "artist_id": ["artist_1", "artist_2", "artist_3"],
+        "artist_name": ["Artist A", "Artist B", "Artist C"],
+    })
 
-    # All artists are matched.
-    assert len(unique_artist_ids) == 5
+    seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
 
-    assert set(unique_artist_ids) == {
-        "3fb3d8fa99488c491008d555baa494ad3722a939e1ec66e66b9010ce7db5d1ea",
-        "82cd882e512362280247750e52ff46b1e8be2064f0a2668f5838573e2c042dea",
-        "5384b648be9b9e12333c4d2ebc49ab51ad049a15fa6623ea1884e9a25014f219",
-        "1b0904879cf52adc6192f8db596dedcc85a98d022baed4561130faf682571132",
-        "3c6c6b248084a76e34d03d5040c9e069a161033203dec1977d17c7f9d24f31a8",
-    }
+    # Tracks are mapped correctly
+    assert set(seed_tracks["track_id"]) == {"track_1", "track_2", "track_3"}
+    # Artists are mapped correctly
+    assert set(seed_artists["artist_id"]) == {"artist_1", "artist_2", "artist_3"}
+
+    # Duplicate tracks are removed
+    assert seed_tracks["track_id"].is_unique
+    # Duplicate artists are removed
+    assert seed_artists["artist_id"].is_unique
+
+    # Output structure is correct
+    assert list(seed_tracks.columns) == ["track_id", "track_name", "artist_id", "artist_name"]
+    assert list(seed_artists.columns) == ["artist_id", "artist_name"]
+
+
+# create_seeds() handles empty inputs
+def test_create_seeds_empty_inputs():
+    top_tracks_df = pd.DataFrame({
+        "user_id": [],
+        "track_name": [],
+        "artist_name": [],
+        "playcount": [],
+    })
+
+    top_artists_df = pd.DataFrame({
+        "user_id": [],
+        "artist_name": [],
+        "playcount": [],
+    })
+
+    tracks_df = pd.DataFrame({
+        "track_id": [],
+        "track_name": [],
+        "artist_id": [],
+        "artist_name": [],
+    })
+
+    artists_df = pd.DataFrame({
+        "artist_id": [],
+        "artist_name": [],
+    })
+
+    seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
+
+    assert seed_tracks.empty
+    assert seed_artists.empty
+
+
+# create_seeds() removes tracks and artists that fail lookup joins
+def test_create_seeds_removes_unknown_tracks_and_artists():
+    top_tracks_df = pd.DataFrame({
+        "user_id": ["user_1"],
+        "track_name": ["Unknown Song"],
+        "artist_name": ["Unknown Artist"],
+        "playcount": [100],
+    })
+
+    top_artists_df = pd.DataFrame({
+        "user_id": ["user_1"],
+        "artist_name": ["Unknown Artist"],
+        "playcount": [100],
+    })
+
+    tracks_df = pd.DataFrame({
+        "track_id": ["track_1"],
+        "track_name": ["Known Song"],
+        "artist_id": ["artist_1"],
+        "artist_name": ["Known Artist"],
+    })
+
+    artists_df = pd.DataFrame({
+        "artist_id": ["artist_1"],
+        "artist_name": ["Known Artist"],
+    })
+
+    seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
+
+    assert seed_tracks.empty
+    assert seed_artists.empty
 
 
 def test_make_id_is_deterministic():
