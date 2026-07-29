@@ -57,7 +57,7 @@ def run_pipeline():
     seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
 
     # Pull and store similarity raw data for each unique seed track/artist
-    for _, row in seed_tracks.iterrows():
+    for row in seed_tracks.itertuples(index=False):
         store_similar_data(
             item_id=row.track_id,
             artist_name=row.artist_name,
@@ -67,7 +67,7 @@ def run_pipeline():
             base_path="similarities/tracks"
         )
 
-    for _, row in seed_artists.iterrows():
+    for row in seed_artists.itertuples(index=False):
         store_similar_data(
             item_id=row.artist_id,
             artist_name=row.artist_name,

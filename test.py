@@ -3,7 +3,7 @@ import os
 import requests
 import json
 from unittest.mock import patch, Mock
-from data_ingestion import call_lastfm, store_user_data
+from data_ingestion import call_lastfm, store_user_data, store_similar_data
 from data_processing import get_users_data_paths, build_user_dataframes
 from global_ids import build_users_df, build_artists_df, build_tracks_df
 from seeds import create_seeds
@@ -671,6 +671,132 @@ def test_create_seeds_removes_unknown_tracks_and_artists():
 
     assert seed_tracks.empty
     assert seed_artists.empty
+
+
+# store_similar_data() saves track similarity responses correctly
+def test_store_similar_data_saves_track_similarity(mocker, tmp_path):
+    mocker.patch(
+        "data_ingestion.call_lastfm",
+        return_value={
+            "similartracks": {
+                "track": [
+                    {"name": "Song B"}
+                ]
+            }
+        },
+    )
+
+    store_similar_data(
+        item_id="track_123",
+        artist_name="Coldplay",
+        category="track",
+        method="track.getSimilar",
+        base_path=tmp_path,
+        track_name="Yellow",
+    )
+
+    file_path = tmp_path / "track_123.json"
+    assert file_path.exists()
+
+    with open(file_path, encoding="utf-8") as f:
+        saved_data = json.load(f)
+    assert saved_data == {
+        "similartracks": {
+            "track": [
+                {"name": "Song B"}
+            ]
+        }
+    }
+
+
+# store_similar_data() saves artist similarity responses correctly
+def test_store_similar_data_saves_artist_similarity(mocker, tmp_path):
+    mocker.patch(
+        "data_ingestion.call_lastfm",
+        return_value={
+            "similarartists": {
+                "artist": [
+                    {"name": "Muse"}
+                ]
+            }
+        },
+    )
+
+    store_similar_data(
+        item_id="artist_123",
+        artist_name="Coldplay",
+        category="artist",
+        method="artist.getSimilar",
+        base_path=tmp_path,
+    )
+
+    file_path = tmp_path / "artist_123.json"
+    assert file_path.exists()
+
+    with open(file_path, encoding="utf-8") as f:
+        saved_data = json.load(f)
+    assert saved_data["similarartists"]["artist"][0]["name"] == "Muse"
+
+
+# store_similar_data() handles empty API responses
+def test_store_similar_data_handles_no_response(mocker, tmp_path):
+    mocker.patch(
+        "data_ingestion.call_lastfm",
+        return_value=None,
+    )
+
+    store_similar_data(
+        item_id="track_123",
+        artist_name="Coldplay",
+        category="track",
+        method="track.getSimilar",
+        base_path=tmp_path,
+        track_name="Yellow",
+    )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+# store_similar_data() handles API errors
+def test_store_similar_data_handles_api_error(mocker, tmp_path):
+    mocker.patch(
+        "data_ingestion.call_lastfm",
+        return_value={
+            "error": 6,
+            "message": "Track not found",
+        },
+    )
+
+    store_similar_data(
+        item_id="track_123",
+        artist_name="Unknown",
+        category="track",
+        method="track.getSimilar",
+        base_path=tmp_path,
+        track_name="Unknown Song",
+    )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+# store_similar_data() handles unexpected exceptions
+def test_store_similar_data_handles_exception(mocker, tmp_path):
+    mocker.patch(
+        "data_ingestion.call_lastfm",
+        side_effect=Exception("API failure"),
+    )
+
+    # Should not raise an exception
+    store_similar_data(
+        item_id="track_123",
+        artist_name="Coldplay",
+        category="track",
+        method="track.getSimilar",
+        base_path=tmp_path,
+        track_name="Yellow",
+    )
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_make_id_is_deterministic():

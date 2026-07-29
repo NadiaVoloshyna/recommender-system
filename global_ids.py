@@ -25,7 +25,11 @@ def build_users_df(users_files: list) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
+def build_artists_df(
+        recent_tracks_df: pd.DataFrame,
+        top_tracks_df: pd.DataFrame,
+        top_artists_df: pd.DataFrame
+) -> pd.DataFrame:
     """
     Extracts artist names from the artist_name columns  of the recent tracks, top tracks, and top artists dataframes.
     Combines these Series into a single Series, removes duplicates and missing values, creates a new dataframe,
@@ -58,7 +62,11 @@ def build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df):
     return artists_df
 
 
-def build_tracks_df(recent_tracks_df, top_tracks_df, artists_df):
+def build_tracks_df(
+        recent_tracks_df: pd.DataFrame,
+        top_tracks_df: pd.DataFrame,
+        artists_df: pd.DataFrame
+) -> pd.DataFrame:
     """
     Build a unique track lookup table.
     Combine recent and top tracks, remove missing values and duplicates, attach artist IDs, remove tracks

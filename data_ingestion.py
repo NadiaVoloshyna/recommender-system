@@ -63,6 +63,7 @@ def store_user_data(user: str, methods: list, base_path: str = "raw_data"):
     :param user: Last.fm username (str)
     :param methods: list of API methods (list)
     :param base_path: folder to store data (str)
+    :return: None. Saves the Last.fm response as a JSON file in the specified directory.
     """
     user_path = os.path.join(base_path, user)
     os.makedirs(user_path, exist_ok=True)
@@ -84,7 +85,25 @@ def store_user_data(user: str, methods: list, base_path: str = "raw_data"):
 
 
 # Similarity data ingestion
-def store_similar_data(item_id, artist_name, category, method, base_path, track_name=None):
+def store_similar_data(
+        item_id: str,
+        artist_name: str,
+        category: str,
+        method: str,
+        base_path: str,
+        track_name: str = None
+):
+    """
+    Retrieves similarity data for a track or artist seed from Last.fm, validates the API response,
+    and stores the raw JSON response locally using the item ID as the filename.
+    :param item_id: unique identifier for the track or artist seed, used as the JSON filename (str)
+    :param artist_name: artist name used for the Last.fm similarity request (str)
+    :param category: seed type, either "track" or "artist" (str)
+    :param method: Last.fm API method used to retrieve similarity data (str)
+    :param base_path: directory where the raw JSON response is stored (str)
+    :param track_name: track name used for track similarity requests (optional for artist requests) (str)
+    :return: None. Saves the Last.fm similarity response as a JSON file in the specified directory.
+    """
     try:
         if category == "track":
             data = call_lastfm(method, track=track_name, artist=artist_name)
@@ -97,16 +116,15 @@ def store_similar_data(item_id, artist_name, category, method, base_path, track_
             print(f"message={data['message']}")
             return
 
-        filename = f"{item_id}.json"
-        file_path = os.path.join(base_path, filename)
+        os.makedirs(base_path, exist_ok=True)
+        file_path = os.path.join(base_path, f"{item_id}.json")
 
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
     except Exception as e:
-        print(f"Error fetching {method} for {item_id} in {category}: {e}")
+        print(f"Error fetching {method} for {item_id}: {e}")
 
-    return
 
 
 

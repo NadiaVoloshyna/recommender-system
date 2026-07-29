@@ -2,7 +2,7 @@ from utils import make_id
 
 
 def map_similarity_ids(tracks_similarity_df, artists_similarity_df, tracks_df, artists_df):
-    tracks_similarity_df = tracks_similarity_df.merge(                                        # track_id, similarity_score, similar_track_id, similar_track_name, track_name
+    tracks_similarity_df = tracks_similarity_df.merge(
         tracks_df[["track_id", "track_name"]],
         left_on="similar_track_name",
         right_on="track_name",
@@ -16,7 +16,7 @@ def map_similarity_ids(tracks_similarity_df, artists_similarity_df, tracks_df, a
     )
     tracks_similarity_df = tracks_similarity_df.drop(columns=["similar_track_name", "track_name"])
 
-    artists_similarity_df = artists_similarity_df.merge(                                      # artist_id, similarity_score, similar_artist_id, similar_artist_name, artist_name
+    artists_similarity_df = artists_similarity_df.merge(
         artists_df[["artist_id", "artist_name"]],
         left_on="similar_artist_name",
         right_on="artist_name",

@@ -1,4 +1,12 @@
-def create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df):
+import pandas as pd
+
+
+def create_seeds(
+        top_tracks_df: pd.DataFrame,
+        top_artists_df: pd.DataFrame,
+        tracks_df: pd.DataFrame,
+        artists_df: pd.DataFrame
+) -> pd.DataFrame:
     """
     Creates unique seed tables for similarity API requests.
     Maps top tracks and top artists to internal IDs, selects each user's top 20 tracks and top 10 artists
