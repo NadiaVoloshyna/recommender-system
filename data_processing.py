@@ -26,7 +26,7 @@ def get_users_data_paths(base_path: str = "raw_data") -> list:
     return all_files
 
 
-def build_user_dataframes(saved_files: list, user_lookup: dict) -> dict:
+def build_user_dataframes(saved_files: list, user_lookup: dict) -> dict[str, pd.DataFrame]:
     """
     Builds cleaned pandas DataFrames from Last.fm JSON files.
     Creates storage for the three datasets, loops through every JSON file, gets the API name and user,
@@ -142,7 +142,7 @@ def load_similarity_data(base_path: str) -> list:
     """
     Scans a directory and returns the paths of all stored similarity data files for later loading and processing.
     :param base_path: directory containing stored similarity files (str)
-    :return: a list of file paths contained in the directory.
+    :return: a list of file paths contained in the directory
     Returns an empty list if the directory does not exist or contains no JSON files.
     """
     if not os.path.exists(base_path):
@@ -154,7 +154,81 @@ def load_similarity_data(base_path: str) -> list:
     ]
 
 
-def build_similarity_dataframes(group, saved_files):
+def build_track_similarity_dataframe(saved_files: list[str], track_lookup: dict) -> pd.DataFrame:
+    """
+    Builds a DataFrame containing similarity relationships between tracks from a collection
+    of JSON files.
+    The function reads each JSON file, extracts the original track information and its
+    similar tracks, validates the extracted data, and combines the results into a single
+    DataFrame.
+    :param saved_files: a list of file paths to JSON files containing similar track data (list[str])
+    :param track_lookup: a dictionary mapping (track_name, artist_name) tuples to track IDs (dict)
+    :return: a dataframe containing the original track ID and name, the similar track ID and name, and the similarity
+    score (pd.DataFrame). If no valid data is found, an empty DataFrame with the expected columns is returned.
+    """
+    dfs = []
+
+    for file_path in saved_files:
+        # The filename contains the ID of the original track
+        track_id = os.path.splitext(os.path.basename(file_path))[0]
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        track_name = data.get("similartracks", {}).get("@attr", {}).get("track")
+        similar_tracks = data.get("similartracks", {}).get("track", [])
+        if not similar_tracks:
+            continue
+
+        rows = []
+        for track in similar_tracks:
+            try:
+                score = float(track.get("match"))
+            except (TypeError, ValueError):
+                score = 0.0
+            similar_track_name = track.get("name")
+            similar_artist_name = track.get("artist", {}).get("name")
+            # Convert track name and artist name into an existing track ID
+            similar_track_id = track_lookup.get((similar_track_name, similar_artist_name))
+            if similar_track_id is None:
+                similar_track_id = make_id(
+                    f"{similar_artist_name}_{similar_track_name}",
+                    "track"
+                )
+            rows.append({
+                "similar_track_id": similar_track_id,
+                "similar_track_name": similar_track_name,
+                "similarity_score": score
+            })
+
+        df = pd.DataFrame(rows)
+
+        df = df[
+            df["similar_track_id"].notna()
+            & df["similar_track_name"].notna()
+            & (df["similar_track_name"].str.strip().str.len() > 0)
+            & (df["similarity_score"] > 0)
+            ]
+        df = df.assign(track_id=track_id, track_name=track_name)
+        df = df[["track_id", "track_name", "similar_track_id", "similar_track_name", "similarity_score"]]
+
+        dfs.append(df)
+
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(
+        columns=[
+            "track_id",
+            "track_name",
+            "similar_track_id",
+            "similar_track_name",
+            "similarity_score",
+        ]
+    )
+
+
+def build_artist_similarity_dataframe(group: str, saved_files: list[str]) -> pd.DataFrame:
+    if group not in {"artist", "track"}:
+        raise ValueError("group must be 'artist' or 'track'")
+
     dfs = []
 
     for file_path in saved_files:
@@ -163,25 +237,30 @@ def build_similarity_dataframes(group, saved_files):
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        similar_items = data.get(f"similar{group}s", {}).get(f"{group}", [])
+        similar_items = data.get(f"similar{group}s", {}).get(group, [])
         if not similar_items:
             continue
 
         df = pd.json_normalize(similar_items)
 
-        # Rename raw API fields
         df = df.rename(columns={"name": f"similar_{group}_name", "match": "similarity_score"})
+        required_cols = [f"similar_{group}_name", "similarity_score"]
+        if not all(col in df.columns for col in required_cols):
+            continue
+        df = df.dropna(subset=required_cols)
 
-        # Filter invalid rows
-        df = df[df[f"similar_{group}_name"].notna() & df["similarity_score"].notna()]
-
-        # Add metadata
         df[f"{group}_id"] = item_id
 
-        # Enforce schema
+        df = df[df[f"similar_{group}_name"].notna() & df["similarity_score"].notna()]
+
         df = df[[f"{group}_id", f"similar_{group}_name", "similarity_score"]]
 
         dfs.append(df)
 
-    return pd.concat(dfs, ignore_index=True)
-
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(
+        columns=[
+            f"{group}_id",
+            f"similar_{group}_name",
+            "similarity_score",
+        ]
+    )

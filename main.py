@@ -1,8 +1,12 @@
 from data_ingestion import store_user_data, store_similar_data
-from data_processing import get_users_data_paths, load_similarity_data, build_user_dataframes, build_similarity_dataframes
+from data_processing import \
+    get_users_data_paths, \
+    load_similarity_data, \
+    build_user_dataframes, \
+    build_track_similarity_dataframe, \
+    build_artist_similarity_dataframe
 from global_ids import build_users_df, build_tracks_df, build_artists_df
 from seeds import create_seeds
-from map_similarity_ids import map_similarity_ids
 
 USERS = ["NadiaV26", "SkullyXIX", "FabioBrt", "owenisupercool", "loomingcloset",
          "Btree15", "Burzay8", "arham23213", "Jeffrylol", "kkauabr",
@@ -30,26 +34,21 @@ def run_pipeline():
         store_user_data(user, METHODS_USER)
 
     # Discover stored user files and create the users lookup table
-    users_files = get_users_data_paths()
-    users_df = build_users_df(users_files)
-    print(f"users_df:\n{users_df.head().to_string()}\n\n")
-    user_lookup = dict(zip(
-        users_df["username"],
-        users_df["user_id"]
-    ))
+    user_files = get_users_data_paths()
+    _, user_lookup = build_users_df(user_files)
 
     # Load user JSON files and transform them into DataFrames
-    user_dataframes = build_user_dataframes(users_files, user_lookup)
-    recent_tracks_df = user_dataframes['recent_tracks']
-    top_tracks_df = user_dataframes['top_tracks']
-    top_artists_df = user_dataframes['top_artists']
+    user_dfs = build_user_dataframes(user_files, user_lookup)
+    recent_tracks_df = user_dfs['recent_tracks']
+    top_tracks_df = user_dfs['top_tracks']
+    top_artists_df = user_dfs['top_artists']
     print(f"recent_tracks_df:\n{recent_tracks_df.head().to_string()}\n\n")
     print(f"top_tracks_df:\n{top_tracks_df.head().to_string()}\n\n")
     print(f"top_artists_df:\n{top_artists_df.head().to_string()}\n\n")
 
     # Create global IDs
-    artists_df = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
-    tracks_df = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
+    artists_df, artist_lookup = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+    tracks_df, track_lookup = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
     print(f"artists_df:\n{artists_df.head().to_string()}\n\n")
     print(f"tracks_df:\n{tracks_df.head().to_string()}\n\n")
 
@@ -81,15 +80,10 @@ def run_pipeline():
     track_similarity_files = load_similarity_data("similarities/tracks")
     artist_similarity_files = load_similarity_data("similarities/artists")
 
-    tracks_similarity_df = build_similarity_dataframes("track", track_similarity_files)
-    artists_similarity_df = build_similarity_dataframes("artist", artist_similarity_files)
-    print(f"Similar_tracks:\n{tracks_similarity_df.head().to_string()}\n\n")
-    print(f"Similar_artists:\n{artists_similarity_df.head().to_string()}\n\n")
-
-    # Map names to IDs, generate missing ids
-    tracks_similarity_df, artists_similarity_df = map_similarity_ids(tracks_similarity_df, artists_similarity_df, tracks_df, artists_df)
-    print(f"Similar_tracks:\n{tracks_similarity_df.head().to_string()}\n\n")
-    print(f"Similar_artists:\n{artists_similarity_df.head().to_string()}\n\n")
+    track_similarity_df = build_track_similarity_dataframe(track_similarity_files, track_lookup)
+    artist_similarity_df = build_artist_similarity_dataframe(artist_similarity_files, artist_lookup)
+    print(f"Similar_tracks:\n{track_similarity_df.head().to_string()}\n\n")
+    print(f"Similar_artists:\n{artist_similarity_df.head().to_string()}\n\n")
 
 
 if __name__ == "__main__":

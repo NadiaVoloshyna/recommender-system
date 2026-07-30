@@ -4,7 +4,11 @@ import requests
 import json
 from unittest.mock import patch, Mock
 from data_ingestion import call_lastfm, store_user_data, store_similar_data
-from data_processing import get_users_data_paths, build_user_dataframes, load_similarity_data
+from data_processing import \
+    get_users_data_paths, \
+    build_user_dataframes, \
+    load_similarity_data, \
+    build_track_similarity_dataframe
 from global_ids import build_users_df, build_artists_df, build_tracks_df
 from seeds import create_seeds
 from utils import make_id
@@ -206,11 +210,11 @@ def test_build_users_df_creates_dataframe():
         "/raw_data/bob/file2.json"
     ]
 
-    result = build_users_df(users_files)
+    users_df, _ = build_users_df(users_files)
 
-    assert isinstance(result, pd.DataFrame)
-    assert list(result.columns) == ["user_id", "username"]
-    assert len(result) == 2
+    assert isinstance(users_df, pd.DataFrame)
+    assert list(users_df.columns) == ["user_id", "username"]
+    assert len(users_df) == 2
 
 
 # build_users_df() removes users duplicates users
@@ -221,10 +225,10 @@ def test_build_users_df_removes_duplicate_users():
         "/raw_data/bob/file1.json"
     ]
 
-    result = build_users_df(users_files)
+    users_df, _ = build_users_df(users_files)
 
-    assert len(result) == 2
-    assert set(result["username"]) == {"alice", "bob"}
+    assert len(users_df) == 2
+    assert set(users_df["username"]) == {"alice", "bob"}
 
 
 # Usernames are sorted in build_users_df()
@@ -235,9 +239,9 @@ def test_build_users_df_sorts_users():
         "/raw_data/bob/file.json"
     ]
 
-    result = build_users_df(users_files)
+    users_df, _ = build_users_df(users_files)
 
-    assert list(result["username"]) == [
+    assert list(users_df["username"]) == [
         "alice",
         "bob",
         "charlie"
@@ -251,18 +255,19 @@ def test_build_users_df_generates_ids(mocker):
         return_value="user_123"
     )
 
-    result = build_users_df(["/raw_data/alice/file.json"])
+    users_df, _ = build_users_df(["/raw_data/alice/file.json"])
 
-    assert result.iloc[0]["user_id"] == "user_123"
+    assert users_df.iloc[0]["user_id"] == "user_123"
 
 
 # An empty list should return an empty DataFrame in build_users_df()
 def test_build_users_df_empty_input():
-    result = build_users_df([])
+    users_df, user_lookup = build_users_df([])
 
-    assert isinstance(result, pd.DataFrame)
-    assert result.empty
-    assert list(result.columns) == []
+    assert isinstance(users_df, pd.DataFrame)
+    assert users_df.empty
+    assert list(users_df.columns) == ["user_id", "username"]
+    assert user_lookup == {}
 
 
 # Check build_user_dataframes() main extraction logic, recent tracks extraction
@@ -473,10 +478,10 @@ def test_build_artists_df_full_transformation_pipeline(mocker):
     top_tracks_df = pd.DataFrame({"artist_name": ["Muse", "Radiohead", None]})
     top_artists_df = pd.DataFrame({"artist_name": ["Coldplay", "Oasis"]})
 
-    result = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+    artists_df, _ = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
 
     # All sources are combined
-    assert set(result["artist_name"]) == {
+    assert set(artists_df["artist_name"]) == {
         "Coldplay",
         "Muse",
         "Radiohead",
@@ -484,17 +489,17 @@ def test_build_artists_df_full_transformation_pipeline(mocker):
     }
 
     # Duplicates are removed
-    assert len(result) == 4
-    assert result["artist_name"].is_unique
+    assert len(artists_df) == 4
+    assert artists_df["artist_name"].is_unique
 
     # Missing values are removed
-    assert result["artist_name"].isna().sum() == 0
+    assert artists_df["artist_name"].isna().sum() == 0
 
     # IDs are generated
-    assert (result["artist_id"] == "artist_123").all()
+    assert (artists_df["artist_id"] == "artist_123").all()
 
     # Verify lookup table structure
-    assert list(result.columns) == ["artist_id", "artist_name"]
+    assert list(artists_df.columns) == ["artist_id", "artist_name"]
 
 
 # build_artists_df handles empty inputs
@@ -503,9 +508,9 @@ def test_build_artists_df_empty_inputs():
     top_tracks_df = pd.DataFrame({"artist_name": []})
     top_artists_df = pd.DataFrame({"artist_name": []})
 
-    result = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
+    artists_df, _ = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
 
-    assert result.empty
+    assert artists_df.empty
 
 
 # build_tracks_df follows the normal transformation pipeline, integration-style test
@@ -528,28 +533,28 @@ def test_build_tracks_df_full_transformation_pipeline(mocker):
         "artist_id": ["artist_1", "artist_2"],
     })
 
-    result = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
+    tracks_df, _ = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
 
     # Missing values are removed
-    assert result["track_name"].isna().sum() == 0
-    assert result["artist_name"].isna().sum() == 0
+    assert tracks_df["track_name"].isna().sum() == 0
+    assert tracks_df["artist_name"].isna().sum() == 0
 
     # Duplicates are removed
-    assert len(result) == 2
-    assert result.duplicated(subset=["track_name", "artist_name"]).sum() == 0
+    assert len(tracks_df) == 2
+    assert tracks_df.duplicated(subset=["track_name", "artist_name"]).sum() == 0
 
     # Artist IDs are attached
-    assert set(result["artist_id"]) == {"artist_1", "artist_2"}
+    assert set(tracks_df["artist_id"]) == {"artist_1", "artist_2"}
 
     # Tracks from known artists are retained
-    assert set(result["track_name"]) == {"Yellow", "Uprising"}
-    assert "Radiohead" not in result["artist_name"].values
+    assert set(tracks_df["track_name"]) == {"Yellow", "Uprising"}
+    assert "Radiohead" not in tracks_df["artist_name"].values
 
     # Track IDs are generated
-    assert (result["track_id"] == "track_123").all()
+    assert (tracks_df["track_id"] == "track_123").all()
 
     # Verify lookup table structure
-    assert list(result.columns) == ["track_id", "track_name", "artist_id", "artist_name"]
+    assert list(tracks_df.columns) == ["track_id", "track_name", "artist_id", "artist_name"]
 
 
 # build_tracks_df handles empty inputs
@@ -558,9 +563,9 @@ def test_build_tracks_df_empty_inputs():
     top_tracks_df = pd.DataFrame({"track_name": [], "artist_name": []})
     artists_df = pd.DataFrame({"artist_name": [], "artist_id": []})
 
-    result = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
+    tracks_df, _ = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
 
-    assert result.empty
+    assert tracks_df.empty
 
 
 # create_seeds() follows the normal transformation pipeline, integration-style test
@@ -826,6 +831,102 @@ def test_load_similarity_data_empty_directory(tmp_path):
     result = load_similarity_data(str(tmp_path))
 
     assert result == []
+
+
+# build_track_similarity_dataframe() correctly converts valid data into a DataFrame
+def test_build_track_similarity_dataframe_valid_data(tmp_path):
+    json_data = {
+        "similartracks": {
+            "track": [
+                {
+                    "name": "Song B",
+                    "artist": {"name": "Artist B"},
+                    "match": "0.8"
+                }
+            ],
+            "@attr": {"track": "Song A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data))
+
+    track_lookup = {
+        ("Song B", "Artist B"): "2"
+    }
+
+    result = build_track_similarity_dataframe([str(file)], track_lookup)
+
+    assert len(result) == 1
+    assert result.iloc[0]["track_id"] == "1"
+    assert result.iloc[0]["track_name"] == "Song A"
+    assert result.iloc[0]["similar_track_id"] == "2"
+    assert result.iloc[0]["similar_track_name"] == "Song B"
+    assert result.iloc[0]["similarity_score"] == 0.8
+
+
+# build_track_similarity_dataframe() returns an empty DataFrame when a JSON file contains no similar tracks
+def test_build_track_similarity_dataframe_empty_similar_tracks(tmp_path):
+    json_data = {
+        "similartracks": {
+            "track": [],
+            "@attr": {"track": "Song A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data), encoding="utf-8")
+
+    result = build_track_similarity_dataframe([str(file)], {})
+
+    assert result.empty
+    assert list(result.columns) == [
+        "track_id",
+        "track_name",
+        "similar_track_id",
+        "similar_track_name",
+        "similarity_score",
+    ]
+
+
+# build_track_similarity_dataframe() removes invalid rows
+def test_build_track_similarity_dataframe_removes_invalid_rows(tmp_path):
+    json_data = {
+        "similartracks": {
+            "track": [
+                {
+                    "name": "Song B",
+                    "artist": {"name": "Artist B"},
+                    "match": "0.8"
+                },
+                {
+                    "name": "",
+                    "artist": {"name": "Artist C"},
+                    "match": "0.9"
+                },
+                {
+                    "name": "Song D",
+                    "artist": {"name": "Artist D"},
+                    "match": "0"
+                }
+            ],
+            "@attr": {"track": "Song A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data), encoding="utf-8")
+
+    track_lookup = {
+        ("Song B", "Artist B"): "2",
+        ("", "Artist C"): "3",
+        ("Song D", "Artist D"): "4",
+    }
+
+    result = build_track_similarity_dataframe([str(file)], track_lookup)
+
+    assert len(result) == 1
+    assert result.iloc[0]["similar_track_name"] == "Song B"
 
 
 def test_make_id_is_deterministic():

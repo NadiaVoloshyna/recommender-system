@@ -3,7 +3,7 @@ import pandas as pd
 import os
 
 
-def build_users_df(users_files: list) -> pd.DataFrame:
+def build_users_df(users_files: list) -> tuple[pd.DataFrame, dict]:
     """
     Looks at a collection of user-related file paths, finds all unique usernames from their folder names,
     assigns each user a generated ID, creates rows for the DataFrame, converts the list into a DataFrame.
@@ -22,14 +22,20 @@ def build_users_df(users_files: list) -> pd.DataFrame:
             "username": user
         })
 
-    return pd.DataFrame(rows)
+    users_df = pd.DataFrame(rows, columns=["user_id", "username"])
+    user_lookup = dict(zip(
+        users_df["username"],
+        users_df["user_id"]
+    ))
+
+    return users_df, user_lookup
 
 
 def build_artists_df(
         recent_tracks_df: pd.DataFrame,
         top_tracks_df: pd.DataFrame,
         top_artists_df: pd.DataFrame
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict]:
     """
     Extracts artist names from the artist_name columns  of the recent tracks, top tracks, and top artists dataframes.
     Combines these Series into a single Series, removes duplicates and missing values, creates a new dataframe,
@@ -58,15 +64,19 @@ def build_artists_df(
     )
 
     artists_df = artists_df[["artist_id", "artist_name"]]
+    artist_lookup = dict(zip(
+        artists_df["artist_name"],
+        artists_df["artist_id"]
+    ))
 
-    return artists_df
+    return artists_df, artist_lookup
 
 
 def build_tracks_df(
         recent_tracks_df: pd.DataFrame,
         top_tracks_df: pd.DataFrame,
         artists_df: pd.DataFrame
-) -> pd.DataFrame:
+) -> tuple[pd.DataFrame, dict]:
     """
     Build a unique track lookup table.
     Combine recent and top tracks, remove missing values and duplicates, attach artist IDs, remove tracks
@@ -75,13 +85,6 @@ def build_tracks_df(
     :param top_tracks_df: DataFrame containing users' top tracks.
     :param artists_df: DataFrame containing unique artist names and their generated IDs.
     :return: track lookup table containing: track_id, track_name, artist_id, artist_name
-    """
-    """
-    Build a unique track lookup table.
-
-    Combine recent and top tracks, remove missing values and duplicates,
-    attach artist IDs, remove tracks without known artists, generate unique
-    track IDs, and select the final columns.
     """
     all_tracks = pd.concat(
         [
@@ -105,6 +108,12 @@ def build_tracks_df(
         make_id(f"{artist}_{track}", "track")
         for artist, track in zip(tracks_df["artist_name"], tracks_df["track_name"])
     ]
+    tracks_df = tracks_df[["track_id", "track_name", "artist_id", "artist_name"]]
+    track_lookup = dict(zip(
+        zip(tracks_df["track_name"], tracks_df["artist_name"]),
+        tracks_df["track_id"]
+    ))
 
-    return tracks_df[["track_id", "track_name", "artist_id", "artist_name"]]
+    return tracks_df, track_lookup
+
 
