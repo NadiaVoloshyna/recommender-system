@@ -29,33 +29,35 @@ METHOD_ARTIST = "artist.getSimilar"
 
 
 def run_pipeline():
-    # Fetch and store raw user data from the API
+    # Fetch raw user data from the API and persist it locally
     for user in USERS:
         store_user_data(user, METHODS_USER)
 
-    # Discover stored user files and create the users lookup table
+    # Locate stored user data files and build the user lookup table
     user_files = get_users_data_paths()
     _, user_lookup = build_users_df(user_files)
 
-    # Load user JSON files and transform them into DataFrames
+    # Load user JSON data and convert each dataset into DataFrames
     user_dfs = build_user_dataframes(user_files, user_lookup)
     recent_tracks_df = user_dfs['recent_tracks']
     top_tracks_df = user_dfs['top_tracks']
     top_artists_df = user_dfs['top_artists']
+
     print(f"recent_tracks_df:\n{recent_tracks_df.head().to_string()}\n\n")
     print(f"top_tracks_df:\n{top_tracks_df.head().to_string()}\n\n")
     print(f"top_artists_df:\n{top_artists_df.head().to_string()}\n\n")
 
-    # Create global IDs
+    # Build global artist and track IDs with lookup mappings
     artists_df, artist_lookup = build_artists_df(recent_tracks_df, top_tracks_df, top_artists_df)
     tracks_df, track_lookup = build_tracks_df(recent_tracks_df, top_tracks_df, artists_df)
+
     print(f"artists_df:\n{artists_df.head().to_string()}\n\n")
     print(f"tracks_df:\n{tracks_df.head().to_string()}\n\n")
 
-    # Create seeds
+    # Generate seed tracks and artists for similarity searches
     seed_tracks, seed_artists = create_seeds(top_tracks_df, top_artists_df, tracks_df, artists_df)
 
-    # Pull and store similarity raw data for each unique seed track/artist
+    # Fetch and store raw similarity data for each unique seed track
     for row in seed_tracks.itertuples(index=False):
         store_similar_data(
             item_id=row.track_id,
@@ -66,6 +68,7 @@ def run_pipeline():
             base_path="similarities/tracks"
         )
 
+    # Fetch and store raw similarity data for each unique seed artist
     for row in seed_artists.itertuples(index=False):
         store_similar_data(
             item_id=row.artist_id,
@@ -76,12 +79,13 @@ def run_pipeline():
             base_path="similarities/artists"
         )
 
-    # Read JSON files and build similarity dataframes
+    # Load stored similarity JSON files and convert them into DataFrames with global track and artist IDs
     track_similarity_files = load_similarity_data("similarities/tracks")
     artist_similarity_files = load_similarity_data("similarities/artists")
 
     track_similarity_df = build_track_similarity_dataframe(track_similarity_files, track_lookup)
     artist_similarity_df = build_artist_similarity_dataframe(artist_similarity_files, artist_lookup)
+
     print(f"Similar_tracks:\n{track_similarity_df.head().to_string()}\n\n")
     print(f"Similar_artists:\n{artist_similarity_df.head().to_string()}\n\n")
 

@@ -8,7 +8,8 @@ from data_processing import \
     get_users_data_paths, \
     build_user_dataframes, \
     load_similarity_data, \
-    build_track_similarity_dataframe
+    build_track_similarity_dataframe, \
+    build_artist_similarity_dataframe
 from global_ids import build_users_df, build_artists_df, build_tracks_df
 from seeds import create_seeds
 from utils import make_id
@@ -927,6 +928,98 @@ def test_build_track_similarity_dataframe_removes_invalid_rows(tmp_path):
 
     assert len(result) == 1
     assert result.iloc[0]["similar_track_name"] == "Song B"
+
+
+# build_artist_similarity_dataframe() correctly converts valid data into a DataFrame
+def test_build_artist_similarity_dataframe_valid_data(tmp_path):
+    json_data = {
+        "similarartists": {
+            "artist": [
+                {
+                    "name": "Artist B",
+                    "match": "0.8"
+                }
+            ],
+            "@attr": {"artist": "Artist A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data), encoding="utf-8")
+
+    artist_lookup = {
+        "Artist B": "2"
+    }
+
+    result = build_artist_similarity_dataframe([str(file)], artist_lookup)
+
+    assert len(result) == 1
+    assert result.iloc[0]["artist_id"] == "1"
+    assert result.iloc[0]["artist_name"] == "Artist A"
+    assert result.iloc[0]["similar_artist_id"] == "2"
+    assert result.iloc[0]["similar_artist_name"] == "Artist B"
+    assert result.iloc[0]["similarity_score"] == 0.8
+
+
+# build_artist_similarity_dataframe() returns an empty DataFrame when a JSON file contains no similar artists
+def test_build_artist_similarity_dataframe_empty_similar_artists(tmp_path):
+    json_data = {
+        "similarartists": {
+            "artist": [],
+            "@attr": {"artist": "Artist A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data), encoding="utf-8")
+
+    result = build_artist_similarity_dataframe([str(file)], {})
+
+    assert result.empty
+    assert list(result.columns) == [
+        "artist_id",
+        "artist_name",
+        "similar_artist_id",
+        "similar_artist_name",
+        "similarity_score",
+    ]
+
+
+# build_artist_similarity_dataframe() removes invalid rows
+def test_build_artist_similarity_dataframe_removes_invalid_rows(tmp_path):
+    json_data = {
+        "similarartists": {
+            "artist": [
+                {
+                    "name": "Artist B",
+                    "match": "0.8"
+                },
+                {
+                    "name": "",
+                    "match": "0.9"
+                },
+                {
+                    "name": "Artist D",
+                    "match": "0"
+                }
+            ],
+            "@attr": {"artist": "Artist A"}
+        }
+    }
+
+    file = tmp_path / "1.json"
+    file.write_text(json.dumps(json_data), encoding="utf-8")
+
+    artist_lookup = {
+        "Artist B": "2",
+        "": "3",
+        "Artist D": "4",
+    }
+
+    result = build_artist_similarity_dataframe([str(file)], artist_lookup)
+
+    assert len(result) == 1
+    assert result.iloc[0]["similar_artist_name"] == "Artist B"
 
 
 def test_make_id_is_deterministic():

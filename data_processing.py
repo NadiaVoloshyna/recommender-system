@@ -186,15 +186,22 @@ def build_track_similarity_dataframe(saved_files: list[str], track_lookup: dict)
                 score = float(track.get("match"))
             except (TypeError, ValueError):
                 score = 0.0
+
             similar_track_name = track.get("name")
+            if not similar_track_name:
+                continue
+
             similar_artist_name = track.get("artist", {}).get("name")
             # Convert track name and artist name into an existing track ID
             similar_track_id = track_lookup.get((similar_track_name, similar_artist_name))
+
             if similar_track_id is None:
                 similar_track_id = make_id(
-                    f"{similar_artist_name}_{similar_track_name}",
+                    f"{similar_track_name}_{similar_artist_name}",
                     "track"
                 )
+                track_lookup[(similar_track_name, similar_artist_name)] = similar_track_id
+
             rows.append({
                 "similar_track_id": similar_track_id,
                 "similar_track_name": similar_track_name,
@@ -225,42 +232,76 @@ def build_track_similarity_dataframe(saved_files: list[str], track_lookup: dict)
     )
 
 
-def build_artist_similarity_dataframe(group: str, saved_files: list[str]) -> pd.DataFrame:
-    if group not in {"artist", "track"}:
-        raise ValueError("group must be 'artist' or 'track'")
-
+def build_artist_similarity_dataframe(saved_files: list[str], artist_lookup: dict) -> pd.DataFrame:
+    """
+    Processes each saved JSON file by extracting the original artist and their similar artists,
+    creating rows containing the similar artist IDs, names, and similarity scores,
+    removing invalid records, adding the original artist information,
+    and combining the results from all files into a single DataFrame.
+    :param saved_files: a list of file paths to JSON files containing similar artist data (list[str])
+    :param artist_lookup: a dictionary mapping artist names to artist IDs (dict)
+    :return: a dataframe containing the original artist ID and name, the similar artist ID and name,
+    and the similarity score (pd.DataFrame).
+    If no valid data is found, an empty DataFrame with the expected columns is returned.
+    """
     dfs = []
 
     for file_path in saved_files:
-        item_id = os.path.splitext(os.path.basename(file_path))[0]
+        # The filename contains the ID of the original artist
+        artist_id = os.path.splitext(os.path.basename(file_path))[0]
 
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        similar_items = data.get(f"similar{group}s", {}).get(group, [])
-        if not similar_items:
+        artist_name = data.get("similarartists", {}).get("@attr", {}).get("artist")
+        similar_artists = data.get("similarartists", {}).get("artist", [])
+        if not similar_artists:
             continue
 
-        df = pd.json_normalize(similar_items)
+        rows = []
+        for artist in similar_artists:
+            try:
+                score = float(artist.get("match"))
+            except (TypeError, ValueError):
+                score = 0.0
 
-        df = df.rename(columns={"name": f"similar_{group}_name", "match": "similarity_score"})
-        required_cols = [f"similar_{group}_name", "similarity_score"]
-        if not all(col in df.columns for col in required_cols):
-            continue
-        df = df.dropna(subset=required_cols)
+            similar_artist_name = artist.get("name")
+            if not similar_artist_name:
+                continue
 
-        df[f"{group}_id"] = item_id
+            # Convert artist name into an existing artist ID
+            similar_artist_id = artist_lookup.get(similar_artist_name)
+            if similar_artist_id is None:
+                similar_artist_id = make_id(similar_artist_name, "artist")
+                artist_lookup[similar_artist_name] = similar_artist_id
 
-        df = df[df[f"similar_{group}_name"].notna() & df["similarity_score"].notna()]
+            rows.append({
+                "similar_artist_id": similar_artist_id,
+                "similar_artist_name": similar_artist_name,
+                "similarity_score": score
+            })
 
-        df = df[[f"{group}_id", f"similar_{group}_name", "similarity_score"]]
+        df = pd.DataFrame(rows)
+
+        df = df[
+            df["similar_artist_id"].notna()
+            & df["similar_artist_name"].notna()
+            & (df["similar_artist_name"].str.strip().str.len() > 0)
+            & (df["similarity_score"] > 0)
+            ]
+        df = df.assign(artist_id=artist_id, artist_name=artist_name)
+        df = df[["artist_id", "artist_name", "similar_artist_id", "similar_artist_name", "similarity_score"]]
 
         dfs.append(df)
 
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame(
         columns=[
-            f"{group}_id",
-            f"similar_{group}_name",
+            "artist_id",
+            "artist_name",
+            "similar_artist_id",
+            "similar_artist_name",
             "similarity_score",
         ]
     )
+
+
