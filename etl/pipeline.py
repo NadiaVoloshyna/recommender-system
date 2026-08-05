@@ -106,7 +106,7 @@ def run_etl_pipeline(fetch_api_data=False):
             "users": users_df,
             "recent_tracks_df": recent_tracks_df,
             "top_tracks_df": top_tracks_df,
-            "top_artists_df": top_tracks_df,
+            "top_artists_df": top_artists_df,
             "artists": artists_df,
             "tracks": tracks_df,
             "track_similarity_df": track_similarity_df,

@@ -23,14 +23,14 @@ def create_seeds(
         tracks_df,
         on=["artist_name", "track_name"],
         how="left",
-        validate="many_to_one",
+        validate="many_to_one"
     )
 
     top_artists_mapped = top_artists_df.merge(
         artists_df,
         on="artist_name",
         how="left",
-        validate="many_to_one",
+        validate="many_to_one"
     )
 
     seed_tracks_df = (
