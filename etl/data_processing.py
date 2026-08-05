@@ -4,9 +4,9 @@ import pandas as pd
 from utils import make_id
 
 
-def get_users_data_paths(base_path: str = "raw_data") -> list:
+def get_users_data_paths(base_path: str = "../data/listening_history") -> list:
     """
-    Creates an empty list, loops through folders inside raw_data, builds the full user folder path,
+    Creates an empty list, loops through folders inside listening_history, builds the full user folder path,
     checks if it is actually a folder, loops through files inside the user folder, create full file path,
     adds the path to the list.
     :param base_path: folder containing stored user data (str, optional)

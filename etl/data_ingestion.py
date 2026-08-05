@@ -56,7 +56,7 @@ def call_lastfm(
     return None
 
 
-def store_user_data(user: str, methods: list, base_path: str = "raw_data"):
+def store_user_data(user: str, methods: list, base_path: str = "../data/listening_history"):
     """
     Creates a folder for the user, loops through each API method, fetches data, skips failed requests,
     creates a filename, creates the full file path, save JSON data, handles unexpected errors.

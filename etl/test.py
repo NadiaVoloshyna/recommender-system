@@ -207,8 +207,8 @@ def test_get_user_data_paths_returns_empty_list(tmp_path):
 # Check that valid file paths produce the expected DataFrame in build_users_df()
 def test_build_users_df_creates_dataframe():
     users_files = [
-        "/raw_data/alice/file1.json",
-        "/raw_data/bob/file2.json"
+        "/listening_history/alice/file1.json",
+        "/listening_history/bob/file2.json"
     ]
 
     users_df, _ = build_users_df(users_files)
@@ -221,9 +221,9 @@ def test_build_users_df_creates_dataframe():
 # build_users_df() removes users duplicates users
 def test_build_users_df_removes_duplicate_users():
     users_files = [
-        "/raw_data/alice/file1.json",
-        "/raw_data/alice/file2.json",
-        "/raw_data/bob/file1.json"
+        "/listening_history/alice/file1.json",
+        "/listening_history/alice/file2.json",
+        "/listening_history/bob/file1.json"
     ]
 
     users_df, _ = build_users_df(users_files)
@@ -235,9 +235,9 @@ def test_build_users_df_removes_duplicate_users():
 # Usernames are sorted in build_users_df()
 def test_build_users_df_sorts_users():
     users_files = [
-        "/raw_data/charlie/file.json",
-        "/raw_data/alice/file.json",
-        "/raw_data/bob/file.json"
+        "/listening_history/charlie/file.json",
+        "/listening_history/alice/file.json",
+        "/listening_history/bob/file.json"
     ]
 
     users_df, _ = build_users_df(users_files)
@@ -256,7 +256,7 @@ def test_build_users_df_generates_ids(mocker):
         return_value="user_123"
     )
 
-    users_df, _ = build_users_df(["/raw_data/alice/file.json"])
+    users_df, _ = build_users_df(["/listening_history/alice/file.json"])
 
     assert users_df.iloc[0]["user_id"] == "user_123"
 
