@@ -1,10 +1,12 @@
 import os
 import json
 import pandas as pd
-from utils import make_id
+from etl.utils import make_id
+from pathlib import Path
+from config.paths import LISTENING_HISTORY_DIR
 
 
-def get_users_data_paths(base_path: str = "../data/listening_history") -> list:
+def get_users_data_paths(base_path: Path = LISTENING_HISTORY_DIR) -> list:
     """
     Creates an empty list, loops through folders inside listening_history, builds the full user folder path,
     checks if it is actually a folder, loops through files inside the user folder, create full file path,

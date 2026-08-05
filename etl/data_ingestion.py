@@ -3,6 +3,8 @@ import time
 import json
 import os
 from dotenv import load_dotenv
+from pathlib import Path
+from config.paths import LISTENING_HISTORY_DIR
 
 load_dotenv()
 
@@ -56,7 +58,7 @@ def call_lastfm(
     return None
 
 
-def store_user_data(user: str, methods: list, base_path: str = "../data/listening_history"):
+def store_user_data(user: str, methods: list, base_path: Path = LISTENING_HISTORY_DIR):
     """
     Creates a folder for the user, loops through each API method, fetches data, skips failed requests,
     creates a filename, creates the full file path, save JSON data, handles unexpected errors.

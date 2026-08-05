@@ -1,4 +1,4 @@
-from utils import make_id
+from etl.utils import make_id
 import pandas as pd
 import os
 

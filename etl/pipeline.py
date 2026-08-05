@@ -1,13 +1,14 @@
-from data_ingestion import store_user_data, store_similar_data
-from data_processing import \
+from etl.data_ingestion import store_user_data, store_similar_data
+from etl.data_processing import \
     get_users_data_paths, \
     load_similarity_data, \
     build_user_dataframes, \
     build_track_similarity_dataframe, \
     build_artist_similarity_dataframe
-from global_ids import build_users_df, build_tracks_df, build_artists_df
-from seeds import create_seeds
+from etl.global_ids import build_users_df, build_tracks_df, build_artists_df
+from etl.seeds import create_seeds
 from tabulate import tabulate
+from config.paths import SIMILARITIES_TRACKS_DIR, SIMILARITIES_ARTISTS_DIR
 
 USERS = ["NadiaV26", "SkullyXIX", "FabioBrt", "owenisupercool", "loomingcloset",
          "Btree15", "Burzay8", "arham23213", "Jeffrylol", "kkauabr",
@@ -75,7 +76,7 @@ def run_etl_pipeline(fetch_api_data=False):
                     track_name=row.track_name,
                     category="track",
                     method=METHOD_TRACK,
-                    base_path="../data/similarities/tracks"
+                    base_path=SIMILARITIES_TRACKS_DIR
                 )
             # Fetch and store raw similarity data for each unique seed artist
             for row in seed_artists.itertuples(index=False):
@@ -85,12 +86,12 @@ def run_etl_pipeline(fetch_api_data=False):
                     track_name=None,
                     category="artist",
                     method=METHOD_ARTIST,
-                    base_path="../data/similarities/artists"
+                    base_path=SIMILARITIES_ARTISTS_DIR
                 )
 
         # Load stored similarity JSON files and convert them into DataFrames with global track and artist IDs
-        track_similarity_files = load_similarity_data("../data/similarities/tracks")
-        artist_similarity_files = load_similarity_data("../data/similarities/artists")
+        track_similarity_files = load_similarity_data(SIMILARITIES_TRACKS_DIR)
+        artist_similarity_files = load_similarity_data(SIMILARITIES_ARTISTS_DIR)
 
         track_similarity_df = build_track_similarity_dataframe(track_similarity_files, track_lookup)
         artist_similarity_df = build_artist_similarity_dataframe(artist_similarity_files, artist_lookup)
@@ -103,12 +104,12 @@ def run_etl_pipeline(fetch_api_data=False):
             print(tabulate(df.head(5), headers="keys", tablefmt="fancy_grid", showindex=False))
 
         return {
-            "users": users_df,
+            "users_df": users_df,
             "recent_tracks_df": recent_tracks_df,
             "top_tracks_df": top_tracks_df,
             "top_artists_df": top_artists_df,
-            "artists": artists_df,
-            "tracks": tracks_df,
+            "artists_df": artists_df,
+            "tracks_df": tracks_df,
             "track_similarity_df": track_similarity_df,
             "artist_similarity_df": artist_similarity_df,
         }
