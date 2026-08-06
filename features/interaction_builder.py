@@ -9,31 +9,20 @@ def build_interaction_dataframe(
         tracks_df: pd.DataFrame
 ) -> pd.DataFrame:
     """
-    Creates a user–track interaction DataFrame by combining users' recently played tracks and top tracks into
-    a single implicit feedback dataset. Each interaction is assigned a weight reflecting the strength of the user's
-    preference. Multiple interactions for the same user–track pair are aggregated into a single interaction score.
+    Creates a user–track interaction DataFrame by combining users' recently played
+    tracks and top tracks into a single implicit feedback dataset.
+    Validates the input DataFrames, maps track names to internal track IDs, removes unmatched tracks, assigns implicit
+    feedback weights (recent listens → weight = 1; top tracks → weight = log(1 + playcount)),
+    combines both interaction sources, and aggregates the weights for each user–track
+    pair to produce a single interaction_strength representing the user's inferred preference for that track.
     :param recent_tracks_df: recently played tracks for each user (pd.DataFrame)
     :param top_tracks_df: users' top tracks together with play counts (pd.DataFrame)
-    :param tracks_df: track lookup table containing global track IDs and track metadata (pd.DataFrame)
+    :param tracks_df: a lookup table that maps (track_name, artist_name) to an internal track_id (pd.DataFrame)
     :return: pd.DataFrame containing: user_id, track_id, interaction_strength
     """
-    validate_columns(
-        recent_tracks_df,
-        ["user_id", "track_name", "artist_name"],
-        "recent_tracks_df"
-    )
-
-    validate_columns(
-        top_tracks_df,
-        ["user_id", "track_name", "artist_name", "playcount"],
-        "top_tracks_df"
-    )
-
-    validate_columns(
-        tracks_df,
-        ["track_id", "track_name", "artist_name"],
-        "tracks_df"
-    )
+    validate_columns(recent_tracks_df, ["user_id", "track_name", "artist_name"], "recent_tracks_df")
+    validate_columns(top_tracks_df, ["user_id", "track_name", "artist_name", "playcount"], "top_tracks_df")
+    validate_columns(tracks_df, ["track_id", "track_name", "artist_name"], "tracks_df")
 
     if recent_tracks_df.empty and top_tracks_df.empty:
         raise ValueError("No interaction data available.")

@@ -13,7 +13,7 @@ def main():
 
     interaction_df = build_interaction_dataframe(recent_tracks_df, top_tracks_df, tracks_df)
     print(f"\nInteraction DataFrame\n")
-    print(tabulate(interaction_df.head(5), headers="keys", tablefmt="fancy_grid", showindex=False))
+    print(tabulate(interaction_df.head(10), headers="keys", tablefmt="fancy_grid", showindex=False))
 
     # Store embeddings
 
