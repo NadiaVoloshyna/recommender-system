@@ -3,6 +3,7 @@ import pandas as pd
 import pandas.testing as pdt
 import pytest
 from features.interaction_builder import build_interaction_dataframe
+from features.embedding_builder import build_track_embeddings
 
 
 # build_interaction_dataframe() builds interactions correctly
@@ -140,4 +141,132 @@ def test_missing_columns_raise_error():
 
     with pytest.raises(ValueError):
         build_interaction_dataframe(recent_tracks_df, top_tracks_df, tracks_df)
+
+
+class FakeSentenceTransformer:
+    """
+    Mock model replacing SentenceTransformer during tests.
+    Returns a fixed-size embedding vector.
+    """
+    def encode(self, text):
+        return np.array(
+            [
+                1.0,
+                2.0,
+                3.0,
+                4.0
+            ]
+        )
+
+
+@pytest.fixture
+def mock_sentence_transformer(monkeypatch):
+    """
+    Replace the real SentenceTransformer with the fake model.
+    """
+    monkeypatch.setattr(
+        "features.embedding_builder.SentenceTransformer",
+        lambda model_name: FakeSentenceTransformer()
+    )
+
+
+# build_track_embeddings() generates embedding
+def test_build_track_embeddings_returns_embeddings(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1, 2],
+            "artist_name": ["Coldplay", "Adele"],
+            "track_name": ["Yellow", "Hello"]
+        }
+    )
+
+    result = build_track_embeddings(tracks_df)
+
+    assert isinstance(result, dict)
+    assert len(result) == 2
+    assert 1 in result
+    assert 2 in result
+    assert isinstance(result[1], np.ndarray)
+
+
+# build_track_embeddings() produces correct embedding shape
+def test_build_track_embeddings_produces_correct_dimension(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1],
+            "artist_name": ["Coldplay"],
+            "track_name": ["Yellow"]
+        }
+    )
+
+    result = build_track_embeddings(tracks_df)
+
+    embedding = result[1]
+
+    assert embedding.shape == (4,)
+
+
+# build_track_embeddings() normalizes embeddings
+def test_build_track_embeddings_normalizes_embeddings(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1],
+            "artist_name": ["Coldplay"],
+            "track_name": ["Yellow"]
+        }
+    )
+
+    result = build_track_embeddings(tracks_df)
+
+    embedding = result[1]
+
+    vector_length = np.linalg.norm(embedding)
+
+    assert vector_length == pytest.approx(1.0)
+
+
+# build_track_embeddings() raises error for missing required columns
+def test_build_track_embeddings_raises_error(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1],
+            "track_name": ["Yellow"]
+            # artist_name missing
+        }
+    )
+
+    with pytest.raises(ValueError):
+        build_track_embeddings(tracks_df)
+
+
+# build_track_embeddings() handles missing artist name
+def test_build_track_embeddings_handles_missing_artist_name(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1],
+            "artist_name": [np.nan],
+            "track_name": ["Yellow"]
+        }
+    )
+
+    result = build_track_embeddings(tracks_df)
+
+    assert 1 in result
+    assert isinstance(result[1], np.ndarray)
+
+
+# build_track_embeddings() handles missing track name
+def test_build_track_embeddings_handles_missing_track_name(mock_sentence_transformer):
+    tracks_df = pd.DataFrame(
+        {
+            "track_id": [1],
+            "artist_name": ["Coldplay"],
+            "track_name": [np.nan]
+        }
+    )
+
+    result = build_track_embeddings(tracks_df)
+
+    assert 1 in result
+    assert isinstance(result[1], np.ndarray)
 
