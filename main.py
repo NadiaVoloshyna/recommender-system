@@ -1,8 +1,6 @@
 from etl.pipeline import run_etl_pipeline
-from features.interaction_builder import build_interaction_dataframe
-from features.embedding_builder import build_track_embeddings
+from features.pipeline import run_features_pipeline
 from vector_store.faiss_builder import build_faiss
-from tabulate import tabulate
 
 
 def main():
@@ -10,20 +8,22 @@ def main():
     etl_data = run_etl_pipeline(fetch_api_data=False)
     recent_tracks_df = etl_data["recent_tracks_df"]
     top_tracks_df = etl_data["top_tracks_df"]
+    top_artists_df = etl_data["top_artists_df"]
+    users_df = etl_data["users_df"]
+    artists_df = etl_data["artists_df"]
     tracks_df = etl_data["tracks_df"]
+    track_similarity_df = etl_data["track_similarity_df"]
+    artist_similarity_df = etl_data["artist_similarity_df"]
 
-    # Build user-track interaction dataset. Used for user history candidates and ML features
-    interaction_df = build_interaction_dataframe(recent_tracks_df, top_tracks_df, tracks_df)
-    print(f"\nInteraction DataFrame\n")
-    print(tabulate(interaction_df.head(10), headers="keys", tablefmt="fancy_grid", showindex=False))
+    # Build user-track interaction dataset. Create track embeddings
+    interaction_df, track_embeddings = run_features_pipeline(
+        recent_tracks_df,
+        top_tracks_df,
+        tracks_df,
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
 
-    # Create track embeddings. Used for vector similarity search
-    track_embeddings = build_track_embeddings(tracks_df)
-    print(f"\nTrack embeddings\n")
-    for track_id, embedding in list(track_embeddings.items())[:10]:
-        print(track_id, embedding.shape)
-
-    # Build FAISS vector index. Used to retrieve semantically similar tracks
+    # Build FAISS vector index
     faiss_index, track_id_mapping = build_faiss(track_embeddings)
     print("\nFAISS Index\n")
     print(f"Number of vectors: {faiss_index.ntotal}")
