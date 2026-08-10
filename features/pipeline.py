@@ -22,6 +22,3 @@ def run_features_pipeline(recent_tracks_df, top_tracks_df, tracks_df, model_name
         raise
 
 
-if __name__ == "__main__":
-    run_features_pipeline()
-

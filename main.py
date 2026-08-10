@@ -1,6 +1,6 @@
 from etl.pipeline import run_etl_pipeline
 from features.pipeline import run_features_pipeline
-from vector_store.faiss_builder import build_faiss
+from vector_store.pipeline import run_vector_store_pipeline
 
 
 def main():
@@ -24,15 +24,8 @@ def main():
     )
 
     # Build FAISS vector index
-    faiss_index, track_id_mapping = build_faiss(track_embeddings)
-    print("\nFAISS Index\n")
-    print(f"Number of vectors: {faiss_index.ntotal}")
-    print(f"Embedding dimension: {faiss_index.d}")
-    print(f"Number of track IDs: {len(track_id_mapping)}")
+    faiss_index, track_id_mapping = run_vector_store_pipeline(track_embeddings)
 
-    print("\nFAISS ID mapping sample\n")
-    for i, track_id in enumerate(track_id_mapping[:10]):
-        print(i, track_id)
 
     # # Generate candidates for users
     # user_candidates = {}
