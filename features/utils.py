@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def validate_columns(df, required_columns, name):
+def validate_columns(df: pd.DataFrame, required_columns: list[str], name: str) -> None:
     if not isinstance(df, pd.DataFrame):
         raise TypeError(f"{name} must be a pandas DataFrame.")
 
@@ -11,5 +11,3 @@ def validate_columns(df, required_columns, name):
         raise ValueError(
             f"{name} is missing required columns: {', '.join(missing)}"
         )
-
-

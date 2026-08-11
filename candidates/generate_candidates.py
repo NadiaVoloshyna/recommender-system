@@ -1,4 +1,5 @@
 import pandas as pd
+from features.utils import validate_columns
 
 
 def get_history_tracks(user_id: str, interaction_df: pd.DataFrame) -> pd.DataFrame:
@@ -21,7 +22,44 @@ def get_history_tracks(user_id: str, interaction_df: pd.DataFrame) -> pd.DataFra
     return history_tracks
 
 
-def get_similar_track_candidates(user_id, history_candidates, track_similarity_df, k_sim, similarity_threshold):
+def get_similar_track_candidates(
+        user_id: str,
+        history_candidates: pd.DataFrame,
+        track_similarity_df: pd.DataFrame,
+        k_sim: int,
+        similarity_threshold: float
+) -> pd.DataFrame:
+    """
+    Finds similar tracks to those in a user's listening history.
+    Takes the tracks from a user's history and finds the top k_sim sufficiently similar tracks for each one.
+    Filters out tracks below the similarity threshold, orders the remaining tracks by similarity score,
+    and formats them as recommendation candidates.
+    :param user_id: ID of the user whose interaction history is being used to generate recommendations (str)
+    :param history_candidates: a DataFrame containing the user's interaction history, including a track_id column
+    :param track_similarity_df: a DataFrame containing the original track_id, similar_track_id,
+    and similarity_score for pairs of similar tracks
+    :param k_sim: maximum number of similar tracks to return for each track in the user's history (int)
+    :param similarity_threshold: minimum similarity score required for a track to be considered a candidate (float)
+    :return: a DataFrame containing the columns: user_id, track_id, interaction_strength, similarity_score, and source.
+    The track_id represents the similar track, interaction_strength is set to None,
+    and source is set to "track_similarity".
+    """
+    validate_columns(history_candidates, ["track_id"], "history_candidates")
+
+    validate_columns(track_similarity_df, ["track_id", "similar_track_id", "similarity_score"], "track_similarity_df")
+
+    if not isinstance(k_sim, int) or isinstance(k_sim, bool):
+        raise TypeError("k_sim must be an integer")
+
+    if k_sim <= 0:
+        raise ValueError("k_sim must be greater than 0")
+
+    if not isinstance(similarity_threshold, (int, float)) or isinstance(similarity_threshold, bool):
+        raise TypeError("similarity_threshold must be numeric")
+
+    if not 0 <= similarity_threshold <= 1:
+        raise ValueError("similarity_threshold must be between 0 and 1")
+
     candidates = []
 
     for track_id in history_candidates["track_id"]:
