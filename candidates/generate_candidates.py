@@ -1,16 +1,24 @@
 import pandas as pd
 
 
-def get_history_tracks(user_id, interaction_df):
-    return (
-        interaction_df[
-            interaction_df["user_id"] == user_id
-        ][["user_id", "track_id", "interaction_strength"]]
-        .drop_duplicates()
-        .assign(
-            similarity_score=None,
-            source="history"
-        ))
+def get_history_tracks(user_id: str, interaction_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Retrieve and format a user's listening history.
+    Filters the interaction DataFrame to find all tracks associated with the specified user, removes duplicate rows,
+    and keeps the user's interaction strength for each track. Adds a similarity_score column with a value of None
+    and a source column labelled "history".
+    :param user_id: the ID of the user whose interaction history is being retrieved (str)
+    :param interaction_df: contains user-track interactions, including the columns user_id, track_id,
+    and interaction_strength (pd.DataFrame)
+    :return: DataFrame containing user_id, track_id, interaction_strength, similarity_score, and source columns.
+    The source column identifies these tracks as coming from the user's interaction history.
+    """
+    history_tracks = interaction_df[interaction_df["user_id"] == user_id][
+        ["user_id", "track_id", "interaction_strength"]]
+
+    history_tracks = history_tracks.assign(similarity_score=None, source="history")
+
+    return history_tracks
 
 
 def get_similar_track_candidates(user_id, history_candidates, track_similarity_df, k_sim, similarity_threshold):
