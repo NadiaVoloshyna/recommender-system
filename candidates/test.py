@@ -3,7 +3,10 @@ import pytest
 from candidates.generate_candidates import \
     get_history_tracks, \
     get_similar_track_candidates, \
-    get_similar_artist_candidates
+    get_similar_artist_candidates, \
+    get_vector_candidates
+import numpy as np
+import faiss
 
 
 @pytest.fixture
@@ -133,7 +136,8 @@ def test_get_similar_track_candidates_formats_correctly():
     )
 
     assert list(result.columns) == ["user_id", "track_id", "source_track_id", "interaction_strength",
-                                    "track_similarity_score", "artist_similarity_score", "source"]
+                                    "track_similarity_score", "artist_similarity_score",
+                                    "vector_similarity_score", "source"]
     assert result.loc[0, "user_id"] == "user1"
     assert result.loc[0, "track_id"] == "track10"
     assert result.loc[0, "source_track_id"] == "track1"
@@ -162,7 +166,8 @@ def test_get_similar_track_candidates_returns_empty_when_no_tracks():
 
     assert result.empty
     assert list(result.columns) == ["user_id", "track_id", "source_track_id", "interaction_strength",
-                                    "track_similarity_score", "artist_similarity_score", "source"]
+                                    "track_similarity_score", "artist_similarity_score",
+                                    "vector_similarity_score", "source"]
 
 
 # get_similar_artist_candidates() returns candidates
@@ -190,6 +195,7 @@ def test_get_similar_artist_candidates_returns_candidates(
         "interaction_strength",
         "track_similarity_score",
         "artist_similarity_score",
+        "vector_similarity_score",
         "source",
     ]
 
@@ -427,4 +433,152 @@ def test_get_similar_artist_candidates_below_threshold_artist_track_is_excluded(
 
     assert "track_8" not in result["track_id"].values
 
+
+# get_vector_candidates() converts FAISS results correctly into candidate DataFrame
+def test_get_vector_candidates_returns_candidates():
+    history_tracks = pd.DataFrame({"track_id": ["track_1"]})
+
+    index = faiss.IndexFlatIP(2)
+    embeddings = np.array([
+        [1.0, 0.0],   # track_1
+        [0.9, 0.1],   # track_2
+        [0.8, 0.2],   # track_3
+    ], dtype=np.float32)
+    index.add(embeddings)
+
+    track_id_mapping = ["track_1", "track_2", "track_3"]
+    track_embeddings = {"track_1": np.array([1.0, 0.0], dtype=np.float32)}
+
+    result = get_vector_candidates(
+        user_id="user_1",
+        history_tracks=history_tracks,
+        faiss_index=index,
+        track_id_mapping=track_id_mapping,
+        track_embeddings=track_embeddings,
+        k=2
+    )
+
+    assert list(result.columns) == [
+        "user_id",
+        "track_id",
+        "source_track_id",
+        "interaction_strength",
+        "track_similarity_score",
+        "artist_similarity_score",
+        "vector_similarity_score",
+        "source"
+    ]
+    assert result["user_id"].tolist() == ["user_1", "user_1"]
+    assert set(result["track_id"]) == {"track_2", "track_3"}
+    assert result["source"].eq("vector_similarity").all()
+    assert result["source_track_id"].isna().all()
+    assert result["interaction_strength"].isna().all()
+    assert result["track_similarity_score"].isna().all()
+    assert result["artist_similarity_score"].isna().all()
+
+
+# get_vector_candidates(): k validation
+@pytest.mark.parametrize("bad_k", [0, -1, -10])
+def test_get_vector_candidates_rejects_non_positive_k(bad_k):
+    history_tracks = pd.DataFrame({"track_id": ["track_1"]})
+
+    with pytest.raises(ValueError, match="k must be greater than 0"):
+        get_vector_candidates(
+            user_id="user_1",
+            history_tracks=history_tracks,
+            faiss_index=None,
+            track_id_mapping=[],
+            track_embeddings={},
+            k=bad_k
+        )
+
+
+@pytest.mark.parametrize("bad_k", [1.5, "10", True, False, None])
+def test_get_vector_candidates_rejects_invalid_k_type(bad_k):
+    history_tracks = pd.DataFrame({"track_id": ["track_1"]})
+
+    with pytest.raises(TypeError, match="k must be an integer"):
+        get_vector_candidates(
+            user_id="user_1",
+            history_tracks=history_tracks,
+            faiss_index=None,
+            track_id_mapping=[],
+            track_embeddings={},
+            k=bad_k
+        )
+
+
+# get_vector_candidates(): empty history
+def test_get_vector_candidates_empty_history():
+    history_tracks = pd.DataFrame(columns=["track_id"])
+
+    result = get_vector_candidates(
+        user_id="user_1",
+        history_tracks=history_tracks,
+        faiss_index=None,
+        track_id_mapping=[],
+        track_embeddings={},
+        k=10
+    )
+
+    assert result.empty
+
+    assert list(result.columns) == [
+        "user_id",
+        "track_id",
+        "source_track_id",
+        "interaction_strength",
+        "track_similarity_score",
+        "artist_similarity_score",
+        "vector_similarity_score",
+        "source"
+    ]
+
+
+# get_vector_candidates(): no embeddings available
+def test_get_vector_candidates_no_embeddings():
+    history_tracks = pd.DataFrame({"track_id": ["track_1", "track_2"]})
+
+    result = get_vector_candidates(
+        user_id="user_1",
+        history_tracks=history_tracks,
+        faiss_index=None,
+        track_id_mapping=[],
+        track_embeddings={},
+        k=10
+    )
+
+    assert result.empty
+
+
+# get_vector_candidates() excludes previously listened tracks
+def test_get_vector_candidates_excludes_history_tracks():
+    history_tracks = pd.DataFrame({"track_id": ["track_1", "track_2"]})
+
+    track_embeddings = {
+        "track_1": np.array([1.0, 0.0], dtype=np.float32),
+        "track_2": np.array([0.9, 0.1], dtype=np.float32),
+    }
+
+    index = faiss.IndexFlatIP(2)
+    embeddings = np.array([
+        [1.0, 0.0],    # track_1
+        [0.9, 0.1],    # track_2
+        [0.8, 0.2],    # track_3
+        [0.7, 0.3],    # track_4
+    ], dtype=np.float32)
+    index.add(embeddings)
+
+    track_id_mapping = ["track_1", "track_2", "track_3", "track_4"]
+
+    result = get_vector_candidates(
+        user_id="user_1",
+        history_tracks=history_tracks,
+        faiss_index=index,
+        track_id_mapping=track_id_mapping,
+        track_embeddings=track_embeddings,
+        k=2
+    )
+
+    assert not set(result["track_id"]).intersection({"track_1", "track_2"})
 

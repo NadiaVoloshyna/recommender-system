@@ -1,5 +1,7 @@
 import pandas as pd
 from features.utils import validate_columns
+import numpy as np
+import  json
 
 
 def get_history_tracks(user_id: str, interaction_df: pd.DataFrame) -> pd.DataFrame:
@@ -98,17 +100,18 @@ def get_similar_track_candidates(
         sims["source_track_id"] = track_id
         sims["interaction_strength"] = interaction_strength
         sims["artist_similarity_score"] = None
+        sims["vector_similarity_score"] = None
         sims["source"] = "track_similarity"
 
         candidates.append(sims[[
             "user_id", "track_id", "source_track_id", "interaction_strength", "track_similarity_score",
-            "artist_similarity_score", "source"
+            "artist_similarity_score", "vector_similarity_score", "source"
         ]])
 
     if not candidates:
         return pd.DataFrame(
             columns=["user_id", "track_id", "source_track_id", "interaction_strength", "track_similarity_score",
-                     "artist_similarity_score", "source"])
+                     "artist_similarity_score", "vector_similarity_score", "source"])
 
     return pd.concat(candidates, ignore_index=True).drop_duplicates().reset_index(drop=True)
 
@@ -239,20 +242,132 @@ def get_similar_artist_candidates(
         artist_tracks["interaction_strength"] = interaction_strength
         artist_tracks["track_similarity_score"] = None
         artist_tracks["artist_similarity_score"] = (artist_tracks["similarity_score"])
+        artist_tracks["vector_similarity_score"] = None
         artist_tracks["source"] = "artist_similarity"
 
         candidates.append(
             artist_tracks[[
                 "user_id", "track_id", "source_track_id", "interaction_strength",  "track_similarity_score",
-                "artist_similarity_score", "source"
+                "artist_similarity_score", "vector_similarity_score", "source"
                 ]])
 
         if not candidates:
             return pd.DataFrame(
                 columns=["user_id", "track_id", "source_track_id", "interaction_strength", "track_similarity_score",
-                         "artist_similarity_score", "source"])
+                         "artist_similarity_score", "vector_similarity_score", "source"])
 
     return pd.concat(candidates, ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+
+def get_vector_candidates(
+        user_id: str,
+        history_tracks: pd.DataFrame,
+        faiss_index,
+        track_id_mapping: list[str],
+        track_embeddings: dict,
+        k: int
+) -> pd.DataFrame:
+    """
+    Generate track recommendation candidates using vector similarity.
+    Creates a user profile vector by averaging the embeddings of tracks in the user's listening history
+    and retrieves the k-nearest tracks from the FAISS index.
+    Vector candidates do not have a single source history track because the user profile vector is constructed
+    from the user's entire history. Therefore, source_track_id and interaction_strength are set to None.
+    Already-listened tracks are excluded from the candidates.
+    :param user_id: ID of the user whose recommendations are being generated (str)
+    :param history_tracks: DataFrame containing the user's listening history.
+        Must include a track_id column (pd.DataFrame)
+    :param faiss_index: loaded FAISS index containing the track embeddings
+    :param track_id_mapping: list mapping FAISS index positions to track IDs (list[str])
+    :param track_embeddings: mapping from track IDs to their embedding vectors (dict)
+    :param k: maximum number of vector-based candidates to retrieve (int)
+    :return: DataFrame containing the columns: user_id, track_id, source_track_id, interaction_strength,
+    track_similarity_score, artist_similarity_score, vector_similarity_score, source
+    source_track_id is NaN
+    interaction_strength is NaN
+    track_similarity_score is NaN
+    artist_similarity_score is NaN
+    vector_similarity_score contains the FAISS similarity score
+    source is "vector_similarity"
+    """
+    output_columns = ["user_id", "track_id", "source_track_id", "interaction_strength", "track_similarity_score",
+                      "artist_similarity_score", "vector_similarity_score", "source"]
+
+    validate_columns(history_tracks, ["track_id"], "history_tracks")
+
+    if not isinstance(k, int) or isinstance(k, bool):
+        raise TypeError("k must be an integer")
+
+    if k <= 0:
+        raise ValueError("k must be greater than 0")
+
+    # Cold-start user
+    if history_tracks.empty:
+        return pd.DataFrame(columns=output_columns)
+
+    #  Get embeddings for tracks in the user's history
+    embeddings = []
+
+    for track_id in history_tracks["track_id"]:
+        embedding = track_embeddings.get(track_id)
+        if embedding is not None:
+            embeddings.append(embedding)
+
+    # No embeddings available for this user's history
+    if not embeddings:
+        return pd.DataFrame(columns=output_columns)
+
+    # Create user profile vector
+    user_vector = np.mean(np.asarray(embeddings), axis=0).astype(np.float32)
+
+    # Tracks already listened to by the user
+    history_track_ids = set(history_tracks["track_id"])
+
+    # Retrieve additional tracks to compensate for tracks that will be removed because they are already in history.
+    search_k = min(k + len(history_track_ids), faiss_index.ntotal)
+
+    if search_k == 0:
+        return pd.DataFrame(columns=output_columns)
+
+    # Retrieve k-nearest tracks
+    distances, indices = faiss_index.search(user_vector.reshape(1, -1), k=search_k)
+
+    candidates = []
+
+    for similarity_score, index in zip(distances[0], indices[0]):
+        # Ignore invalid FAISS indices
+        if index == -1:
+            continue
+
+        track_id = track_id_mapping[index]
+
+        # Do not recommend tracks already in history
+        if track_id in history_track_ids:
+            continue
+
+        candidates.append({
+            "user_id": user_id,
+            "track_id": track_id,
+            "source_track_id": np.nan,
+            "interaction_strength": np.nan,
+            "track_similarity_score": np.nan,
+            "artist_similarity_score": np.nan,
+            "vector_similarity_score": float(similarity_score),
+            "source": "vector_similarity"
+        })
+
+        # Keep at most k recommendation candidates
+        if len(candidates) >= k:
+            break
+
+    if not candidates:
+        return pd.DataFrame(columns=output_columns)
+
+    return (
+        pd.DataFrame(candidates, columns=output_columns)
+        .drop_duplicates()
+        .reset_index(drop=True)
+    )
 
 
 def generate_candidates(
@@ -262,9 +377,11 @@ def generate_candidates(
         interaction_df,
         faiss_index,
         track_id_mapping,
+        track_embeddings,
         k_track_candidates,
         k_artist_candidates,
         k_artists,
+        k_vector_candidates,
         similarity_threshold
 ):
     all_candidates = []
@@ -293,9 +410,16 @@ def generate_candidates(
             similarity_threshold=similarity_threshold
         )
 
-        # vector_candidates = get_vector_candidates(history_candidates, faiss_index, track_id_mapping, track_embeddings)
+        vector_candidates = get_vector_candidates(
+            user_id,
+            history_tracks,
+            faiss_index,
+            track_id_mapping,
+            track_embeddings,
+            k=k_vector_candidates
+        )
 
-        candidates = pd.concat([track_candidates, artist_tracks], ignore_index=True)
+        candidates = pd.concat([track_candidates, artist_tracks, vector_candidates], ignore_index=True)
 
         all_candidates.append(candidates)
 
