@@ -33,8 +33,9 @@ def main():
         interaction_df=interaction_df,
         faiss_index=faiss_index,
         track_id_mapping=track_id_mapping,
-        k_track_sim=10,
-        k_artist_sim=5,
+        k_track_candidates=20,
+        k_artist_candidates=10,
+        k_artists=20,
         similarity_threshold=0.70
     )
 
@@ -56,4 +57,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
