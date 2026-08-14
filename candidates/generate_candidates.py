@@ -1,7 +1,6 @@
 import pandas as pd
 from features.utils import validate_columns
 import numpy as np
-import  json
 
 
 def get_history_tracks(user_id: str, interaction_df: pd.DataFrame) -> pd.DataFrame:
@@ -426,5 +425,7 @@ def generate_candidates(
     if all_candidates:
         return pd.concat(all_candidates, ignore_index=True)
 
-    return pd.DataFrame(columns=["user_id", "track_id", "interaction_strength", "similarity_score", "source"])
+    return pd.DataFrame(columns=["user_id", "track_id", "source_track_id", "interaction_strength",
+                                 "track_similarity_score", "artist_similarity_score",
+                                 "vector_similarity_score", "source"])
 
