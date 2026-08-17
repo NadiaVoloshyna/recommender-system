@@ -4,6 +4,7 @@ from features.candidate_features import build_candidate_features
 from vector_store.pipeline import run_vector_store_pipeline
 from candidates.generate_candidates import generate_candidates
 from tabulate import tabulate
+import pandas as pd
 
 
 def main():
@@ -74,20 +75,100 @@ def main():
         print(source_df[score_column].describe(percentiles=[0.25, 0.5, 0.75, 0.9, 0.95, 0.99]))
 
     # Candidates feature engineering
-    feature_df = build_candidate_features(candidates=candidates)
+    feature_df = build_candidate_features(candidates=candidates, interaction_df=interaction_df)
+
+    # Features analysis
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", None)
 
     print("\nFeature_df\n")
     display_feature_df = feature_df.head(10).copy()
     for col in ["user_id", "track_id"]:
         display_feature_df[col] = display_feature_df[col].astype(str).str[:8] + "..."
     print(tabulate(display_feature_df, headers="keys", tablefmt="fancy_grid", showindex=False))
+
+    print("\nShape:")
     print(feature_df.shape)
-    print(feature_df[["track_signal", "artist_signal", "vector_signal", "n_sources"]].describe())
+
+    print("\nFeature distributions:")
+    distribution_columns = [
+        "interaction_strength",
+        "interaction_strength_log",
+        "interaction_strength_normalized",
+
+        "global_interaction_strength",
+        "global_interaction_strength_log",
+        "global_popularity_missing",
+
+        "track_similarity_score",
+        "artist_similarity_score",
+        "vector_similarity_score",
+
+        "max_similarity",
+        "mean_similarity",
+        "n_similarity_sources",
+
+        "track_signal",
+        "artist_signal",
+        "vector_signal",
+
+        "n_sources"]
+    print(feature_df[distribution_columns].describe())
+
+    print("\nSimilarity feature coverage:")
+    for col in ["track_similarity_score", "artist_similarity_score", "vector_similarity_score"]:
+        print(f"{col}: {(feature_df[col] > 0).mean():.1%}")
+
+    print("\nGlobal popularity coverage:")
+    print(
+        f"Popularity available: "
+        f"{(feature_df['global_popularity_missing'] == 0).mean():.1%}"
+    )
+    print(
+        f"Global popularity missing: "
+        f"{(feature_df['global_popularity_missing'] == 1).mean():.1%}"
+    )
+    print(
+        f"Positive global popularity: "
+        f"{(feature_df['global_interaction_strength'] > 0).mean():.1%}"
+    )
+    print(
+        f"Global popularity == 0: "
+        f"{(feature_df['global_interaction_strength'] == 0).mean():.1%}"
+    )
+
+    print("\nGlobal popularity distribution:")
+    print(
+        feature_df["global_interaction_strength_log"].describe(
+            percentiles=[0.25, 0.5, 0.75, 0.9, 0.95, 0.99]))
+
+    print("\nCombined similarity features:")
+    print(feature_df[[
+                "max_similarity",
+                "mean_similarity",
+                "n_similarity_sources"
+            ]].describe())
+
+    print("\nCandidates by number of similarity sources:")
+    print(feature_df["n_similarity_sources"].value_counts().sort_index())
+
+    print("\nCandidates by number of retrieval sources:")
+    print(feature_df["n_sources"].value_counts().sort_index())
+
+    print("\nZero signal proportions:")
+    for col in ["track_signal", "artist_signal", "vector_signal"]:
+        print(f"{col}: {(feature_df[col] == 0).mean():.1%}")
+
+    user_normalized_max = (feature_df.groupby("user_id")["interaction_strength_normalized"].max())
+    print("\nPer-user normalized interaction max:")
+    print(user_normalized_max.describe())
+
+    print("\nSignal ranges:")
+    for col in ["track_signal", "artist_signal", "vector_signal"]:
+        print(f"{col}: "f"min={feature_df[col].min():.3f}, "f"max={feature_df[col].max():.3f}")
 
     # Ranking
     # ranked_candidates = rank_candidates(feature_df)
-
-    # Evaluation
 
 
 if __name__ == "__main__":
