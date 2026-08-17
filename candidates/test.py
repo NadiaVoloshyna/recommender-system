@@ -436,18 +436,22 @@ def test_get_similar_artist_candidates_below_threshold_artist_track_is_excluded(
 
 # get_vector_candidates() converts FAISS results correctly into candidate DataFrame
 def test_get_vector_candidates_returns_candidates():
-    history_tracks = pd.DataFrame({"track_id": ["track_1"]})
+    history_tracks = pd.DataFrame({"track_id": ["track_1", "track_2"], "interaction_strength": [3.0, 5.0]})
 
     index = faiss.IndexFlatIP(2)
     embeddings = np.array([
         [1.0, 0.0],   # track_1
         [0.9, 0.1],   # track_2
         [0.8, 0.2],   # track_3
+        [0.7, 0.3],  # track_4
     ], dtype=np.float32)
     index.add(embeddings)
 
-    track_id_mapping = ["track_1", "track_2", "track_3"]
-    track_embeddings = {"track_1": np.array([1.0, 0.0], dtype=np.float32)}
+    track_id_mapping = ["track_1", "track_2", "track_3", "track_4"]
+    track_embeddings = {
+        "track_1": np.array([1.0, 0.0], dtype=np.float32),
+        "track_2": np.array([0.9, 0.1], dtype=np.float32),
+    }
 
     result = get_vector_candidates(
         user_id="user_1",
@@ -469,12 +473,13 @@ def test_get_vector_candidates_returns_candidates():
         "source"
     ]
     assert result["user_id"].tolist() == ["user_1", "user_1"]
-    assert set(result["track_id"]) == {"track_2", "track_3"}
+    assert result["track_id"].tolist() == ["track_3", "track_4"]
     assert result["source"].eq("vector_similarity").all()
     assert result["source_track_id"].isna().all()
-    assert result["interaction_strength"].isna().all()
+    assert result["interaction_strength"].eq(4.0).all()
     assert result["track_similarity_score"].isna().all()
     assert result["artist_similarity_score"].isna().all()
+    assert result["vector_similarity_score"].tolist() == pytest.approx([0.77, 0.68])
 
 
 # get_vector_candidates(): k validation
@@ -553,7 +558,7 @@ def test_get_vector_candidates_no_embeddings():
 
 # get_vector_candidates() excludes previously listened tracks
 def test_get_vector_candidates_excludes_history_tracks():
-    history_tracks = pd.DataFrame({"track_id": ["track_1", "track_2"]})
+    history_tracks = pd.DataFrame({"track_id": ["track_1", "track_2"], "interaction_strength": [3.0, 5.0]})
 
     track_embeddings = {
         "track_1": np.array([1.0, 0.0], dtype=np.float32),

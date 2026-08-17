@@ -98,8 +98,8 @@ def get_similar_track_candidates(
         sims["user_id"] = user_id
         sims["source_track_id"] = track_id
         sims["interaction_strength"] = interaction_strength
-        sims["artist_similarity_score"] = None
-        sims["vector_similarity_score"] = None
+        sims["artist_similarity_score"] = np.nan
+        sims["vector_similarity_score"] = np.nan
         sims["source"] = "track_similarity"
 
         candidates.append(sims[[
@@ -239,9 +239,9 @@ def get_similar_artist_candidates(
         artist_tracks["user_id"] = user_id
         artist_tracks["source_track_id"] = source_track_id
         artist_tracks["interaction_strength"] = interaction_strength
-        artist_tracks["track_similarity_score"] = None
+        artist_tracks["track_similarity_score"] = np.nan
         artist_tracks["artist_similarity_score"] = (artist_tracks["similarity_score"])
-        artist_tracks["vector_similarity_score"] = None
+        artist_tracks["vector_similarity_score"] = np.nan
         artist_tracks["source"] = "artist_similarity"
 
         candidates.append(
@@ -304,13 +304,16 @@ def get_vector_candidates(
     if history_tracks.empty:
         return pd.DataFrame(columns=output_columns)
 
-    #  Get embeddings for tracks in the user's history
+    # Get embeddings and interaction strengths for tracks in the user's history
     embeddings = []
+    interaction_strengths = []
 
-    for track_id in history_tracks["track_id"]:
-        embedding = track_embeddings.get(track_id)
+    for _, row in history_tracks.iterrows():
+        embedding = track_embeddings.get(row["track_id"])
+
         if embedding is not None:
             embeddings.append(embedding)
+            interaction_strengths.append(row["interaction_strength"])
 
     # No embeddings available for this user's history
     if not embeddings:
@@ -318,6 +321,9 @@ def get_vector_candidates(
 
     # Create user profile vector
     user_vector = np.mean(np.asarray(embeddings), axis=0).astype(np.float32)
+
+    # Mean interaction strength of tracks used in the user profile
+    mean_interaction_strength = np.mean(interaction_strengths)
 
     # Tracks already listened to by the user
     history_track_ids = set(history_tracks["track_id"])
@@ -348,7 +354,7 @@ def get_vector_candidates(
             "user_id": user_id,
             "track_id": track_id,
             "source_track_id": np.nan,
-            "interaction_strength": np.nan,
+            "interaction_strength": mean_interaction_strength,
             "track_similarity_score": np.nan,
             "artist_similarity_score": np.nan,
             "vector_similarity_score": float(similarity_score),

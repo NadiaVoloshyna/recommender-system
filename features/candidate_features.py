@@ -2,15 +2,15 @@ import pandas as pd
 import numpy as np
 
 
-def build_candidate_features(candidates: pd.DataFrame, source_overlap) -> pd.DataFrame:
+def build_candidate_features(candidates: pd.DataFrame) -> pd.DataFrame:
     """
     Build ranking features from generated recommendation candidates.
     :param candidates:
-    :param source_overlap:
     :return:
     """
     feature_df = candidates.copy()
 
+    # Similarity signals
     feature_df["track_signal"] = (
             feature_df["interaction_strength"].fillna(0)
             * feature_df["track_similarity_score"].fillna(0)
@@ -22,22 +22,40 @@ def build_candidate_features(candidates: pd.DataFrame, source_overlap) -> pd.Dat
     )
 
     feature_df["vector_signal"] = (
-        feature_df["vector_similarity_score"].fillna(0)
+        feature_df["interaction_strength"].fillna(0)
+        * feature_df["vector_similarity_score"].fillna(0)
     )
 
-    # Add source indicators
-    feature_df["is_track_similarity"] = (feature_df["source"] == "track_similarity").astype(int)
+    # Number of different sources that generated this candidate
+    source_overlap = (
+        candidates.groupby(["user_id", "track_id"])["source"]
+        .nunique()
+        .rename("n_sources")
+        .reset_index()
+    )
 
-    feature_df["is_artist_similarity"] = (feature_df["source"] == "artist_similarity").astype(int)
-
-    feature_df["is_vector_similarity"] = (feature_df["source"] == "vector_similarity").astype(int)
-
-    # Add number of sources per candidate
     feature_df = feature_df.merge(
-        source_overlap.rename("n_sources").reset_index(),
+        source_overlap,
         on=["user_id", "track_id"],
-        how="left"
+        how="left",
     )
+
+    feature_df = (feature_df.groupby(["user_id", "track_id"], as_index=False).agg({
+            "interaction_strength": "max",
+            "track_similarity_score": "max",
+            "artist_similarity_score": "max",
+            "vector_similarity_score": "max",
+            "track_signal": "max",
+            "artist_signal": "max",
+            "vector_signal": "max",
+            "n_sources": "max"
+        })
+    )
+
+    feature_df["track_similarity_score"] = (feature_df["track_similarity_score"].fillna(0))
+    feature_df["artist_similarity_score"] = (feature_df["artist_similarity_score"].fillna(0))
+    feature_df["vector_similarity_score"] = (feature_df["vector_similarity_score"].fillna(0))
+    feature_df["interaction_strength"] = (feature_df["interaction_strength"].fillna(0))
 
     # Normalize interaction_strength per user
     # feature_df["interaction_strength_log"] = np.log1p(
