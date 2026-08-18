@@ -10,12 +10,12 @@ def build_candidate_features(candidates: pd.DataFrame, interaction_df: pd.DataFr
     :return: a DataFrame containing aggregated ranking features
     """
     feature_df = candidates.copy()
+    feature_df = feature_df.rename(columns={"interaction_strength": "source_interaction_strength"})
 
     # Clean missing values
     similarity_columns = ["track_similarity_score", "artist_similarity_score", "vector_similarity_score"]
     for col in similarity_columns:
         feature_df[col] = feature_df[col].fillna(0)
-    feature_df["interaction_strength"] = (feature_df["interaction_strength"].fillna(0))
 
     # Number of different sources that generated each candidate
     source_overlap = (
@@ -30,7 +30,7 @@ def build_candidate_features(candidates: pd.DataFrame, interaction_df: pd.DataFr
         feature_df
         .groupby(["user_id", "track_id"], as_index=False)
         .agg({
-            "interaction_strength": "max",
+            "source_interaction_strength": "max",
             "track_similarity_score": "max",
             "artist_similarity_score": "max",
             "vector_similarity_score": "max",
@@ -42,57 +42,58 @@ def build_candidate_features(candidates: pd.DataFrame, interaction_df: pd.DataFr
         interaction_df
         .groupby("track_id")["interaction_strength"]
         .sum()
-        .rename("global_interaction_strength")
+        .rename("global_popularity")
         .reset_index()
     )
     feature_df = feature_df.merge(global_interaction_strength, on="track_id", how="left")
-    feature_df["global_popularity_missing"] = (feature_df["global_interaction_strength"].isna().astype(int))
-    feature_df["global_interaction_strength"] = (feature_df["global_interaction_strength"].fillna(0))
-    feature_df["global_interaction_strength_log"] = np.log1p(feature_df["global_interaction_strength"])
+    feature_df["global_popularity_missing"] = (feature_df["global_popularity"].isna().astype(int))
+    feature_df["global_popularity"] = (feature_df["global_popularity"].fillna(0))
+    feature_df["global_popularity_log"] = np.log1p(feature_df["global_popularity"])
+
+    # Normalize global popularity relative to each user's candidate set
+    user_max = (feature_df.groupby("user_id")["global_popularity_log"].transform("max"))
+    feature_df["candidate_relative_global_popularity"] = np.where(
+        user_max > 0, feature_df["global_popularity_log"] / user_max, 0)
 
     # Combined similarity features
     similarity_columns = ["track_similarity_score", "artist_similarity_score", "vector_similarity_score"]
     feature_df["max_similarity"] = (feature_df[similarity_columns].max(axis=1))
-    feature_df["mean_similarity"] = (feature_df[similarity_columns].replace(0, np.nan).mean(axis=1).fillna(0))
-
-    # Number of retrieval methods that supplied similarity evidence
-    feature_df["n_similarity_sources"] = (feature_df[similarity_columns] > 0).sum(axis=1)
-
-    # Log-transform interaction strength
-    feature_df["interaction_strength_log"] = np.log1p(feature_df["interaction_strength"])
-    # Normalize interaction strength within each user
-    user_max = (feature_df.groupby("user_id")["interaction_strength_log"].transform("max"))
-    feature_df["interaction_strength_normalized"] = np.where(
-        user_max > 0, feature_df["interaction_strength_log"] / user_max, 0)
+    feature_df["mean_similarity"] = (feature_df[similarity_columns].replace(0, np.nan).mean(axis=1))
 
     # Similarity signals
-    feature_df["track_signal"] = (feature_df["interaction_strength_normalized"] * feature_df["track_similarity_score"])
-    feature_df["artist_signal"] = (feature_df["interaction_strength_normalized"] * feature_df["artist_similarity_score"])
-    feature_df["vector_signal"] = (feature_df["interaction_strength_normalized"] * feature_df["vector_similarity_score"])
+    feature_df["track_signal"] = (
+            feature_df["candidate_relative_global_popularity"] * feature_df["track_similarity_score"])
+    feature_df["artist_signal"] = (
+            feature_df["candidate_relative_global_popularity"] * feature_df["artist_similarity_score"])
+    feature_df["vector_signal"] = (
+            feature_df["candidate_relative_global_popularity"] * feature_df["vector_similarity_score"])
 
     return feature_df
 
-    # ranking_features = [
-    #     "interaction_strength_log",
-    #     "interaction_strength_normalized",
+    # ranking_features
     #
+    # User/source information
+    #     "source_interaction_strength",
+    #
+    # Retrieval evidence
     #     "track_similarity_score",
     #     "artist_similarity_score",
     #     "vector_similarity_score",
+    #     "n_sources",
     #
-    #     "track_signal",
-    #     "artist_signal",
-    #     "vector_signal",
+    # Popularity
+    #     "global_popularity_log",
+    #     "global_popularity_missing",
+    #     "candidate_relative_global_popularity",
     #
+    # Combined similarity
     #     "max_similarity",
     #     "mean_similarity",
     #
-    #     "n_sources",
-    #     "n_similarity_sources",
-    #
-    #     "global_interaction_strength_log",
-    #     "global_popularity_missing",
-    # ]
+    # Engineered interactions
+    #     "track_signal",
+    #     "artist_signal",
+    #     "vector_signal",
 
 
 
