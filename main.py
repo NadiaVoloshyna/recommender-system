@@ -36,11 +36,10 @@ def main():
         faiss_index=faiss_index,
         track_id_mapping=track_id_mapping,
         track_embeddings=track_embeddings,
-        k_track_candidates=20,
-        k_artist_candidates=10,
+        k_track_candidates=50,
+        k_artist_candidates=30,
         k_artists=20,
-        k_vector_candidates=20,
-        similarity_threshold=0.70
+        k_vector_candidates=50
     )
 
     # Candidates analysis
@@ -173,4 +172,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

@@ -24,7 +24,6 @@ def get_similar_track_candidates(
         history_tracks: pd.DataFrame,
         track_similarity_df: pd.DataFrame,
         k_sim: int,
-        similarity_threshold: float
 ) -> pd.DataFrame:
     """
     Generate track recommendation candidates based on track similarity.
@@ -40,8 +39,6 @@ def get_similar_track_candidates(
     track_id, similar_track_id, and similarity_score (pd.DataFrame)
     :param k_sim: maximum number of unique similar tracks to return for each track in the user's listening history.
     Must be greater than zero (int)
-    :param similarity_threshold: minimum similarity score required for a track to be considered a candidate.
-    Must be between 0 and 1 inclusive (float)
     :return: a DataFrame containing the columns: user_id, track_id, source_track_id, interaction_strength,
     track_similarity_score, artist_similarity_score, and source.
     track_id represents the recommended similar track
@@ -60,12 +57,6 @@ def get_similar_track_candidates(
     if k_sim <= 0:
         raise ValueError("k_sim must be greater than 0")
 
-    if not isinstance(similarity_threshold, (int, float)) or isinstance(similarity_threshold, bool):
-        raise TypeError("similarity_threshold must be numeric")
-
-    if not 0 <= similarity_threshold <= 1:
-        raise ValueError("similarity_threshold must be between 0 and 1")
-
     candidates = []
 
     # Tracks already listened to by the user should not be recommended.
@@ -75,10 +66,7 @@ def get_similar_track_candidates(
         track_id = history_row["track_id"]
         interaction_strength = history_row["interaction_strength"]
         sims = (
-            track_similarity_df[
-                (track_similarity_df["track_id"] == track_id)
-                & (track_similarity_df["similarity_score"] >= similarity_threshold)
-                ]
+            track_similarity_df[(track_similarity_df["track_id"] == track_id)]
             .sort_values("similarity_score", ascending=False)
             .drop_duplicates("similar_track_id")
             .copy()
@@ -121,8 +109,7 @@ def get_similar_artist_candidates(
         artist_similarity_df: pd.DataFrame,
         tracks_df: pd.DataFrame,
         k_sim: int,
-        k_artists: int,
-        similarity_threshold: float
+        k_artists: int
 ) -> pd.DataFrame:
     """
     Generate track recommendation candidates based on artist similarity.
@@ -145,8 +132,6 @@ def get_similar_artist_candidates(
     Must be greater than zero (int)
     :param k_artists: maximum number of similar artists to consider for each source artist.
     Must be greater than zero (int)
-    :param similarity_threshold: minimum artist similarity score required for an artist to be considered
-    as a candidate. Must be between 0 and 1 inclusive (float)
     :return: a DataFrame containing the columns:
         user_id`: ID of the user
         track_id: recommended track belonging to a similar artist
@@ -174,12 +159,6 @@ def get_similar_artist_candidates(
     if k_artists <= 0:
         raise ValueError("k_artists must be greater than 0")
 
-    if not isinstance(similarity_threshold, (int, float)) or isinstance(similarity_threshold, bool):
-        raise TypeError("similarity_threshold must be numeric")
-
-    if not 0 <= similarity_threshold <= 1:
-        raise ValueError("similarity_threshold must be between 0 and 1")
-
     candidates = []
 
     # Connect each history track to its artist
@@ -201,8 +180,7 @@ def get_similar_artist_candidates(
 
         # Find similar artists above the similarity threshold
         similar_artists = (
-            artist_similarity_df[(artist_similarity_df["artist_id"] == source_artist_id)
-                                 & (artist_similarity_df["similarity_score"] >= similarity_threshold)]
+            artist_similarity_df[(artist_similarity_df["artist_id"] == source_artist_id)]
             .sort_values("similarity_score", ascending=False)
             .drop_duplicates("similar_artist_id")
             .head(k_artists)
@@ -386,8 +364,7 @@ def generate_candidates(
         k_track_candidates,
         k_artist_candidates,
         k_artists,
-        k_vector_candidates,
-        similarity_threshold
+        k_vector_candidates
 ):
     all_candidates = []
 
@@ -401,8 +378,7 @@ def generate_candidates(
             user_id,
             history_tracks,
             track_similarity_df,
-            k_sim=k_track_candidates,
-            similarity_threshold=similarity_threshold
+            k_sim=k_track_candidates
         )
 
         artist_tracks = get_similar_artist_candidates(
@@ -411,8 +387,7 @@ def generate_candidates(
             artist_similarity_df,
             tracks_df,
             k_sim=k_artist_candidates,
-            k_artists=k_artists,
-            similarity_threshold=similarity_threshold
+            k_artists=k_artists
         )
 
         vector_candidates = get_vector_candidates(
