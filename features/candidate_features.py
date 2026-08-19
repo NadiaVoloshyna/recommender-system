@@ -37,6 +37,13 @@ def build_candidate_features(candidates: pd.DataFrame, interaction_df: pd.DataFr
         })
         .merge(source_overlap, on=["user_id", "track_id"], how="left"))
 
+    feature_df["source_interaction_strength_log"] = np.log1p(feature_df["source_interaction_strength"])
+
+    # Similarity availability flags
+    feature_df["track_similarity_available"] = (feature_df["track_similarity_score"] > 0).astype(int)
+    feature_df["artist_similarity_available"] = (feature_df["artist_similarity_score"] > 0).astype(int)
+    feature_df["vector_similarity_available"] = (feature_df["vector_similarity_score"] > 0).astype(int)
+
     # Global track popularity
     global_interaction_strength = (
         interaction_df
@@ -51,49 +58,62 @@ def build_candidate_features(candidates: pd.DataFrame, interaction_df: pd.DataFr
     feature_df["global_popularity_log"] = np.log1p(feature_df["global_popularity"])
 
     # Normalize global popularity relative to each user's candidate set
-    user_max = (feature_df.groupby("user_id")["global_popularity_log"].transform("max"))
+    user_max_popularity = (feature_df.groupby("user_id")["global_popularity_log"].transform("max"))
     feature_df["candidate_relative_global_popularity"] = np.where(
-        user_max > 0, feature_df["global_popularity_log"] / user_max, 0)
+        user_max_popularity > 0, feature_df["global_popularity_log"] / user_max_popularity, 0)
 
     # Combined similarity features
     similarity_columns = ["track_similarity_score", "artist_similarity_score", "vector_similarity_score"]
     feature_df["max_similarity"] = (feature_df[similarity_columns].max(axis=1))
-    feature_df["mean_similarity"] = (feature_df[similarity_columns].replace(0, np.nan).mean(axis=1))
+    feature_df["mean_similarity_available"] = (feature_df[similarity_columns].replace(0, np.nan).mean(axis=1))
+    feature_df["mean_similarity_all"] = (feature_df[similarity_columns].mean(axis=1))
 
-    # Similarity signals
-    feature_df["track_signal"] = (
-            feature_df["candidate_relative_global_popularity"] * feature_df["track_similarity_score"])
-    feature_df["artist_signal"] = (
-            feature_df["candidate_relative_global_popularity"] * feature_df["artist_similarity_score"])
-    feature_df["vector_signal"] = (
-            feature_df["candidate_relative_global_popularity"] * feature_df["vector_similarity_score"])
+    # Interaction-aware similarity signals
+    interaction_log = feature_df["source_interaction_strength_log"]
+    feature_df["track_interaction_signal"] = (interaction_log * feature_df["track_similarity_score"])
+    feature_df["artist_interaction_signal"] = (interaction_log * feature_df["artist_similarity_score"])
+    feature_df["vector_interaction_signal"] = (interaction_log * feature_df["vector_similarity_score"])
+
+    column_order = [
+        # Identity
+        "user_id",
+        "track_id",
+
+        # Interaction
+        "source_interaction_strength",
+        "source_interaction_strength_log",
+
+        # Candidate support
+        "n_sources",
+
+        # Similarity
+        "track_similarity_score",
+        "artist_similarity_score",
+        "vector_similarity_score",
+        "max_similarity",
+        "mean_similarity_available",
+        "mean_similarity_all",
+
+        # Interaction × similarity
+        "track_interaction_signal",
+        "artist_interaction_signal",
+        "vector_interaction_signal",
+
+        # Popularity
+        "global_popularity",
+        "global_popularity_log",
+        "candidate_relative_global_popularity",
+        "global_popularity_missing",
+
+        # Availability
+        "track_similarity_available",
+        "artist_similarity_available",
+        "vector_similarity_available",
+    ]
+
+    feature_df = feature_df[column_order]
 
     return feature_df
-
-    # ranking_features
-    #
-    # User/source information
-    #     "source_interaction_strength",
-    #
-    # Retrieval evidence
-    #     "track_similarity_score",
-    #     "artist_similarity_score",
-    #     "vector_similarity_score",
-    #     "n_sources",
-    #
-    # Popularity
-    #     "global_popularity_log",
-    #     "global_popularity_missing",
-    #     "candidate_relative_global_popularity",
-    #
-    # Combined similarity
-    #     "max_similarity",
-    #     "mean_similarity",
-    #
-    # Engineered interactions
-    #     "track_signal",
-    #     "artist_signal",
-    #     "vector_signal",
 
 
 

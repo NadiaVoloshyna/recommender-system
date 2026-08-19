@@ -36,10 +36,10 @@ def main():
         faiss_index=faiss_index,
         track_id_mapping=track_id_mapping,
         track_embeddings=track_embeddings,
-        k_track_candidates=50,
-        k_artist_candidates=30,
+        k_track_candidates=40,
+        k_artist_candidates=20,
         k_artists=20,
-        k_vector_candidates=50
+        k_vector_candidates=200
     )
 
     # Candidates analysis
@@ -91,24 +91,37 @@ def main():
 
     print("\nFeature distributions:")
     distribution_columns = [
+        # Interaction
         "source_interaction_strength",
+        "source_interaction_strength_log",
 
+        # Candidate support
+        "n_sources",
+
+        # Similarity
         "track_similarity_score",
         "artist_similarity_score",
         "vector_similarity_score",
-
-        "n_sources",
-
-        "global_popularity_log",
-        "global_popularity_missing",
-        "candidate_relative_global_popularity",
-
         "max_similarity",
-        "mean_similarity",
+        "mean_similarity_available",
+        "mean_similarity_all",
 
-        "track_signal",
-        "artist_signal",
-        "vector_signal"]
+        # Interaction × similarity
+        "track_interaction_signal",
+        "artist_interaction_signal",
+        "vector_interaction_signal",
+
+        # Popularity
+        "global_popularity",
+        "global_popularity_log",
+        "candidate_relative_global_popularity",
+        "global_popularity_missing",
+
+        # Availability
+        "track_similarity_available",
+        "artist_similarity_available",
+        "vector_similarity_available"
+    ]
     print(feature_df[distribution_columns].describe())
 
     print("\nSimilarity feature coverage:")
@@ -117,30 +130,30 @@ def main():
 
     print("\nCandidates by number of retrieval sources:")
     print(feature_df["n_sources"].value_counts().sort_index())
+    print(f"Candidates from multiple sources: "f"{(feature_df['n_sources'] > 1).mean():.1%}")
 
     print("\nGlobal popularity coverage:")
-    print(
-        f"Popularity available: "
-        f"{(feature_df['global_popularity_missing'] == 0).mean():.1%}")
-    print(
-        f"Global popularity missing: "
-        f"{(feature_df['global_popularity_missing'] == 1).mean():.1%}")
+    popularity_available = (feature_df["global_popularity_missing"] == 0).mean()
+    popularity_missing = (feature_df["global_popularity_missing"] == 1).mean()
+    print(f"Popularity available: {popularity_available:.1%}")
+    print(f"Global popularity missing: {popularity_missing:.1%}")
 
-    print("\nGlobal popularity distribution:")
-    print(
-        feature_df["global_popularity_log"].describe(
-            percentiles=[0.25, 0.5, 0.75, 0.9, 0.95, 0.99]))
-
-    print("\nCandidate-relative popularity:")
-    print(feature_df["candidate_relative_global_popularity"].describe())
-
-    print("\nZero signal proportions:")
-    for col in ["track_signal", "artist_signal", "vector_signal"]:
+    print("\nZero interaction × similarity signal proportions:")
+    for col in ["track_interaction_signal", "artist_interaction_signal", "vector_interaction_signal"]:
         print(f"{col}: {(feature_df[col] == 0).mean():.1%}")
 
-    print("\nSignal ranges:")
-    for col in ["track_signal", "artist_signal", "vector_signal"]:
+    print("\nInteraction × similarity signal ranges:")
+    for col in ["track_interaction_signal", "artist_interaction_signal", "vector_interaction_signal"]:
         print(f"{col}: "f"min={feature_df[col].min():.3f}, "f"max={feature_df[col].max():.3f}")
+
+    print("\nInteraction × similarity signals when similarity is available:")
+    signal_pairs = [("track_interaction_signal", "track_similarity_score"),
+                    ("artist_interaction_signal", "artist_similarity_score"),
+                    ("vector_interaction_signal", "vector_similarity_score")]
+    for signal_col, similarity_col in signal_pairs:
+        available = feature_df[similarity_col] > 0
+        print(f"\n{signal_col}:")
+        print(feature_df.loc[available, signal_col].describe())
 
     # Ranking
     # ranked_candidates = rank_candidates(feature_df)
