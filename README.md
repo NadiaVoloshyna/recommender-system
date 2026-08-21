@@ -1,1 +1,1 @@
-A modular content-based/hybrid recommender system in the feature-engineering and ranking-development stage, with ETL, candidate retrieval, embedding, and vector-search infrastructure already implemented.
+A modular content-based hybrid recommender system in the feature-engineering and candidate generation stage, with ETL, candidate retrieval, embedding, and vector-search infrastructure already implemented.
