@@ -5,6 +5,7 @@ import pytest
 from features.interaction_builder import build_interaction_dataframe
 from features.embedding_builder import build_track_embeddings
 from features.candidate_features import build_candidate_features
+from features.labels import split_user_history
 
 
 # build_interaction_dataframe() builds interactions correctly
@@ -450,3 +451,75 @@ def test_build_candidate_features_output_columns():
     ]
 
     assert result.columns.tolist() == expected_columns
+
+
+# split_user_history() returns two dataframes
+def test_split_user_history_returns_two_dataframes():
+    interactions = pd.DataFrame({
+        "user_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H"]
+    })
+
+    train, test = split_user_history(interactions)
+
+    assert isinstance(train, pd.DataFrame)
+    assert isinstance(test, pd.DataFrame)
+
+
+# split_user_history(): each user has test interaction
+def test_split_user_history_each_user_has_test_interaction():
+    interactions = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
+    })
+
+    train, test = split_user_history(interactions)
+
+    # Every user should appear in the test set
+    assert set(test["user_id"]) == {1, 2, 3}
+
+
+# split_user_history(): each user keeps training data when possible
+def test_split_user_history_each_user_keeps_training_data():
+    interactions = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2, 2],
+        "track_id": ["A", "B", "C", "D", "E", "F"]
+    })
+
+    train, test = split_user_history(interactions)
+
+    # Users with more than one interaction should have training data
+    assert set(train["user_id"]) == {1, 2}
+
+
+# split_user_history(): data is not lost or duplicated
+def test_split_user_history_data_is_not_lost_or_duplicated():
+    interactions = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2, 2],
+        "track_id": ["A", "B", "C", "D", "E", "F"]
+    })
+
+    train, test = split_user_history(interactions)
+
+    # Same total number of rows
+    assert len(train) + len(test) == len(interactions)
+
+    # No interaction should appear in both sets
+    train_rows = set(map(tuple, train.to_numpy()))
+    test_rows = set(map(tuple, test.to_numpy()))
+
+    assert train_rows.isdisjoint(test_rows)
+
+
+# split_user_history(): test split is reproducible
+def test_split_user_history_split_is_reproducible():
+    interactions = pd.DataFrame({
+        "user_id": [1, 1, 1, 1, 2, 2, 2, 2],
+        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H"]
+    })
+
+    train1, test1 = split_user_history(interactions, random_state=42)
+    train2, test2 = split_user_history(interactions, random_state=42)
+
+    pd.testing.assert_frame_equal(train1, train2)
+    pd.testing.assert_frame_equal(test1, test2)

@@ -3,6 +3,7 @@ from features.pipeline import run_features_pipeline
 from features.candidate_features import build_candidate_features
 from vector_store.pipeline import run_vector_store_pipeline
 from candidates.generate_candidates import generate_candidates
+from features.labels import split_user_history
 from tabulate import tabulate
 import pandas as pd
 
@@ -24,6 +25,13 @@ def main():
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
+    # Split interactions
+    train_part, held_out = split_user_history(
+        interaction_df,
+        test_size=0.2,
+        random_state=42,
+    )
+
     # Vector retrieval infrastructure
     faiss_index, track_id_mapping = run_vector_store_pipeline(track_embeddings)
 
@@ -32,7 +40,7 @@ def main():
         tracks_df=tracks_df,
         track_similarity_df=track_similarity_df,
         artist_similarity_df=artist_similarity_df,
-        interaction_df=interaction_df,
+        interaction_df=train_part,
         faiss_index=faiss_index,
         track_id_mapping=track_id_mapping,
         track_embeddings=track_embeddings,
@@ -74,7 +82,7 @@ def main():
         print(source_df[score_column].describe(percentiles=[0.25, 0.5, 0.75, 0.9, 0.95, 0.99]))
 
     # Candidates feature engineering
-    feature_df = build_candidate_features(candidates=candidates, interaction_df=interaction_df)
+    feature_df = build_candidate_features(candidates=candidates, interaction_df=train_part)
 
     # Features analysis
     pd.set_option("display.max_columns", None)
