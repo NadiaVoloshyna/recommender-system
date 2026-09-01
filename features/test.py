@@ -5,7 +5,7 @@ import pytest
 from features.interaction_builder import build_interaction_dataframe
 from features.embedding_builder import build_track_embeddings
 from features.candidate_features import build_candidate_features
-from features.labels import split_user_history
+from features.labels import split_user_history, add_labels
 
 
 # build_interaction_dataframe() builds interactions correctly
@@ -523,3 +523,76 @@ def test_split_user_history_split_is_reproducible():
 
     pd.testing.assert_frame_equal(train1, train2)
     pd.testing.assert_frame_equal(test1, test2)
+
+
+# add_labels() labels matching pairs positively
+def test_add_labels_matching_pairs_are_labelled_positive():
+    feature_df = pd.DataFrame({
+        "user_id": [1, 1, 2],
+        "track_id": ["A", "B", "C"],
+        "score": [0.5, 0.7, 0.2]
+    })
+
+    held_out = pd.DataFrame({
+        "user_id": [1, 2],
+        "track_id": ["A", "C"]
+    })
+
+    result = add_labels(feature_df, held_out)
+
+    assert result["label"].tolist() == [1, 0, 1]
+
+
+# add_labels() labels non-matching pairs negatively
+def test_add_labels_non_matching_pairs_are_labelled_negative():
+    feature_df = pd.DataFrame({
+        "user_id": [1, 1],
+        "track_id": ["A", "B"]
+    })
+
+    held_out = pd.DataFrame({
+        "user_id": [1],
+        "track_id": ["A"]
+    })
+
+    result = add_labels(feature_df, held_out)
+
+    assert result.loc[result["track_id"] == "B", "label"].iloc[0] == 0
+
+
+# add_labels() handles duplicate held-out pairs correctly
+def test_add_labels_duplicate_held_out_pairs_do_not_affect_labels():
+    feature_df = pd.DataFrame({
+        "user_id": [1, 1],
+        "track_id": ["A", "B"]
+    })
+
+    held_out = pd.DataFrame({
+        "user_id": [1, 1],
+        "track_id": ["A", "A"]
+    })
+
+    result = add_labels(feature_df, held_out)
+
+    assert result["label"].tolist() == [1, 0]
+
+
+# add_labels() is not modifying the original DataFrame
+def test_original_feature_dataframe_is_not_modified():
+    feature_df = pd.DataFrame({
+        "user_id": [1, 1],
+        "track_id": ["A", "B"],
+        "score": [0.5, 0.7]
+    })
+
+    original = feature_df.copy()
+
+    held_out = pd.DataFrame({
+        "user_id": [1],
+        "track_id": ["A"]
+    })
+
+    add_labels(feature_df, held_out)
+
+    pd.testing.assert_frame_equal(feature_df, original)
+

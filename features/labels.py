@@ -48,3 +48,33 @@ def split_user_history(
         pd.concat(test_parts, ignore_index=True)
     )
 
+
+def add_labels(
+    feature_df: pd.DataFrame,
+    held_out: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Add binary labels to the feature dataset.
+    Takes the held-out interactions as positive examples and labels matching user-track pairs in the feature dataset
+    as positive (1), while all other pairs are labelled as negative (0).
+    :param feature_df: one row per user-track pair containing the engineered ranking features (pd.DataFrame)
+    :param held_out: held-out test interactions for all users (pd.DataFrame)
+    :return: feature dataset containing the engineered ranking features and the binary labels (pd.DataFrame).
+    """
+    if not isinstance(feature_df, pd.DataFrame):
+        raise TypeError("feature_df must be a pandas DataFrame")
+
+    if not isinstance(held_out, pd.DataFrame):
+        raise TypeError("held_out must be a pandas DataFrame")
+
+    positive_pairs = held_out[["user_id", "track_id"]].drop_duplicates()
+
+    feature_df = feature_df.copy()
+
+    feature_df["label"] = (
+        feature_df.set_index(["user_id", "track_id"]).index
+        .isin(positive_pairs.set_index(["user_id", "track_id"]).index)
+        .astype("int8")
+    )
+
+    return feature_df

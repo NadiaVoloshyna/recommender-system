@@ -3,7 +3,7 @@ from features.pipeline import run_features_pipeline
 from features.candidate_features import build_candidate_features
 from vector_store.pipeline import run_vector_store_pipeline
 from candidates.generate_candidates import generate_candidates
-from features.labels import split_user_history
+from features.labels import split_user_history, add_labels
 from tabulate import tabulate
 import pandas as pd
 
@@ -44,10 +44,10 @@ def main():
         faiss_index=faiss_index,
         track_id_mapping=track_id_mapping,
         track_embeddings=track_embeddings,
-        k_track_candidates=40,
-        k_artist_candidates=20,
-        k_artists=20,
-        k_vector_candidates=200
+        k_track_candidates=60,
+        k_artist_candidates=30,
+        k_artists=25,
+        k_vector_candidates=300
     )
 
     # Candidates analysis
@@ -162,6 +162,65 @@ def main():
         available = feature_df[similarity_col] > 0
         print(f"\n{signal_col}:")
         print(feature_df.loc[available, signal_col].describe())
+
+    # Add labels using held-out interactions
+    feature_df = add_labels(feature_df, held_out)
+
+    # Label analysis
+    print("\nLabel distribution:")
+    print(
+        feature_df["label"]
+        .value_counts()
+        .sort_index()
+        .rename(index={0: "Negative", 1: "Positive"})
+    )
+
+    print("\nLabel proportions:")
+    print(
+        feature_df["label"]
+        .value_counts(normalize=True)
+        .sort_index()
+        .rename(index={0: "Negative", 1: "Positive"})
+        .map(lambda x: f"{x:.2%}")
+    )
+
+    print("\nPositive examples per user:")
+    positive_per_user = (feature_df.groupby("user_id")["label"].sum())
+    print(positive_per_user.describe())
+
+    print("\nUsers with at least one positive candidate:")
+    users_with_positive = (feature_df.groupby("user_id")["label"].max().mean())
+    print(f"{users_with_positive:.2%}")
+
+    print("\nCandidates per user by label:")
+    candidates_by_label = (
+        feature_df.groupby(["user_id", "label"])
+        .size()
+        .unstack(fill_value=0)
+    )
+    print(candidates_by_label.describe())
+
+    print("\nFeature distributions by label:")
+    print(feature_df.groupby("label")[distribution_columns].mean().T)
+
+    print("\nCandidate recall by retrieval source:")
+    held_out_pairs = set(zip(held_out["user_id"], held_out["track_id"]))
+    for source in candidates["source"].unique():
+        source_pairs = set(
+            zip(
+                candidates.loc[candidates["source"] == source, "user_id"],
+                candidates.loc[candidates["source"] == source, "track_id"]
+            )
+        )
+        source_recall = len(held_out_pairs & source_pairs) / len(held_out_pairs)
+        print(f"{source}: {source_recall:.2%}")
+
+    held_out_pairs = set(zip(held_out["user_id"], held_out["track_id"]))
+    candidate_pairs = set(zip(candidates["user_id"], candidates["track_id"]))
+    retrieved_positives = held_out_pairs & candidate_pairs
+    recall = len(retrieved_positives) / len(held_out_pairs)
+
+    print(f"\nCandidate recall: {recall:.2%}")
 
     # Ranking
     # ranked_candidates = rank_candidates(feature_df)
