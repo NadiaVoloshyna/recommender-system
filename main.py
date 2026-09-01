@@ -6,6 +6,7 @@ from candidates.generate_candidates import generate_candidates
 from features.labels import split_user_history, add_labels
 from tabulate import tabulate
 import pandas as pd
+from pathlib import Path
 
 
 def main():
@@ -166,6 +167,11 @@ def main():
     # Add labels using held-out interactions
     feature_df = add_labels(feature_df, held_out)
 
+    # Persist features
+    feature_path = Path("data/features/60_30_25_300.parquet")
+    feature_path.parent.mkdir(parents=True, exist_ok=True)
+    feature_df.to_parquet(feature_path, index=False)
+
     # Label analysis
     print("\nLabel distribution:")
     print(
@@ -209,9 +215,7 @@ def main():
         source_pairs = set(
             zip(
                 candidates.loc[candidates["source"] == source, "user_id"],
-                candidates.loc[candidates["source"] == source, "track_id"]
-            )
-        )
+                candidates.loc[candidates["source"] == source, "track_id"]))
         source_recall = len(held_out_pairs & source_pairs) / len(held_out_pairs)
         print(f"{source}: {source_recall:.2%}")
 
@@ -219,11 +223,21 @@ def main():
     candidate_pairs = set(zip(candidates["user_id"], candidates["track_id"]))
     retrieved_positives = held_out_pairs & candidate_pairs
     recall = len(retrieved_positives) / len(held_out_pairs)
-
     print(f"\nCandidate recall: {recall:.2%}")
 
-    # Ranking
-    # ranked_candidates = rank_candidates(feature_df)
+    # Create training set
+    # feature_df = pd.read_parquet("data/features/60_30_25_300.parquet")
+    # training_df = sample_negatives(
+    #     feature_df,
+    #     negatives_per_positive=10,
+    #     random_state=42
+    # )
+
+    # Train
+    # model = train_model(training_df)
+
+    # Rank candidates using trained model
+    # ranked_candidates = rank_candidates(feature_df, model)
 
 
 if __name__ == "__main__":
