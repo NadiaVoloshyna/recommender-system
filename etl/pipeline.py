@@ -40,7 +40,7 @@ def run_etl_pipeline(fetch_api_data=False):
         # Locate stored user data files and build the user lookup table
         user_files = get_users_data_paths()
         users_df, user_lookup = build_users_df(user_files)
-        print(f"\nUsers processed: {len(user_lookup)}\n")
+        print(f"\nUsers processed: {len(user_lookup)}")
 
         # Load user JSON data and convert each dataset into DataFrames
         user_dfs = build_user_dataframes(user_files, user_lookup)
@@ -53,7 +53,7 @@ def run_etl_pipeline(fetch_api_data=False):
             "Top Tracks": top_tracks_df,
             "Top Artists": top_artists_df,
         }.items():
-            print(f"{name}\n")
+            print(f"\n{name}\n")
             print(tabulate(df.head(5), headers="keys", tablefmt="fancy_grid", showindex=False))
 
         # Build global artist and track IDs with lookup mappings
