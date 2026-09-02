@@ -453,43 +453,53 @@ def test_build_candidate_features_output_columns():
     assert result.columns.tolist() == expected_columns
 
 
-# split_user_history() returns two dataframes
-def test_split_user_history_returns_two_dataframes():
+# split_user_history() returns three dataframes
+def test_split_user_history_returns_three_dataframes():
     interactions = pd.DataFrame({
         "user_id": [1, 1, 1, 1, 2, 2, 2, 2],
         "track_id": ["A", "B", "C", "D", "E", "F", "G", "H"]
     })
 
-    train, test = split_user_history(interactions)
+    train, val, test = split_user_history(interactions)
 
     assert isinstance(train, pd.DataFrame)
+    assert isinstance(val, pd.DataFrame)
     assert isinstance(test, pd.DataFrame)
 
 
-# split_user_history(): each user has test interaction
-def test_split_user_history_each_user_has_test_interaction():
+# split_user_history(): each user has validation and test interactions
+def test_split_user_history_each_user_has_val_and_test_interaction():
     interactions = pd.DataFrame({
-        "user_id": [1, 1, 1, 2, 2, 2, 3, 3, 3],
-        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
+        "user_id": [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3],
+        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"]
     })
 
-    train, test = split_user_history(interactions)
+    train, val, test = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
 
-    # Every user should appear in the test set
+    assert set(val["user_id"]) == {1, 2, 3}
     assert set(test["user_id"]) == {1, 2, 3}
 
 
 # split_user_history(): each user keeps training data when possible
 def test_split_user_history_each_user_keeps_training_data():
     interactions = pd.DataFrame({
-        "user_id": [1, 1, 1, 2, 2, 2],
-        "track_id": ["A", "B", "C", "D", "E", "F"]
+        "user_id": [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        "track_id": ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
     })
 
-    train, test = split_user_history(interactions)
+    train, val, test = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
 
-    # Users with more than one interaction should have training data
-    assert set(train["user_id"]) == {1, 2}
+    assert set(train["user_id"]) == {1, 2, 3}
 
 
 # split_user_history(): data is not lost or duplicated
@@ -499,30 +509,79 @@ def test_split_user_history_data_is_not_lost_or_duplicated():
         "track_id": ["A", "B", "C", "D", "E", "F"]
     })
 
-    train, test = split_user_history(interactions)
+    train, val, test = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
 
-    # Same total number of rows
-    assert len(train) + len(test) == len(interactions)
+    # No rows are lost
+    assert len(train) + len(val) + len(test) == len(interactions)
 
-    # No interaction should appear in both sets
+    # No interaction appears in more than one split
     train_rows = set(map(tuple, train.to_numpy()))
+    val_rows = set(map(tuple, val.to_numpy()))
     test_rows = set(map(tuple, test.to_numpy()))
 
+    assert train_rows.isdisjoint(val_rows)
     assert train_rows.isdisjoint(test_rows)
+    assert val_rows.isdisjoint(test_rows)
 
 
-# split_user_history(): test split is reproducible
+# split_user_history(): split is reproducible
 def test_split_user_history_split_is_reproducible():
     interactions = pd.DataFrame({
         "user_id": [1, 1, 1, 1, 2, 2, 2, 2],
         "track_id": ["A", "B", "C", "D", "E", "F", "G", "H"]
     })
 
-    train1, test1 = split_user_history(interactions, random_state=42)
-    train2, test2 = split_user_history(interactions, random_state=42)
+    train1, val1, test1 = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
+
+    train2, val2, test2 = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
 
     pd.testing.assert_frame_equal(train1, train2)
+    pd.testing.assert_frame_equal(val1, val2)
     pd.testing.assert_frame_equal(test1, test2)
+
+
+# split_user_history(): different random seeds can produce different splits
+def test_split_user_history_different_seed_changes_split():
+    interactions = pd.DataFrame({
+        "user_id": [1] * 20,
+        "track_id": [f"track_{i}" for i in range(20)]
+    })
+
+    train1, val1, test1 = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=42,
+    )
+
+    train2, val2, test2 = split_user_history(
+        interactions,
+        val_size=0.1,
+        test_size=0.1,
+        random_state=123,
+    )
+
+    # At least one split should differ
+    assert not (
+        train1.equals(train2)
+        and val1.equals(val2)
+        and test1.equals(test2)
+    )
 
 
 # add_labels() labels matching pairs positively
