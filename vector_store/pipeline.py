@@ -11,7 +11,7 @@ def run_vector_store_pipeline(track_embeddings):
         print(f"Number of track IDs: {len(track_id_mapping)}")
 
         print("\nFAISS ID mapping sample\n")
-        for i, track_id in enumerate(track_id_mapping[:10]):
+        for i, track_id in enumerate(track_id_mapping[:5]):
             print(i, track_id)
 
         return faiss_index, track_id_mapping

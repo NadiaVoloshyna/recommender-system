@@ -138,10 +138,6 @@ def analyze_labels(feature_df):
         .map(lambda x: f"{x:.2%}")
     )
 
-    print("\nPositive examples per user:")
-    positive_per_user = (feature_df.groupby("user_id")["label"].sum())
-    print(positive_per_user.describe())
-
     print("\nUsers with at least one positive candidate:")
     users_with_positive = (feature_df.groupby("user_id")["label"].max().mean())
     print(f"{users_with_positive:.2%}")
