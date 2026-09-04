@@ -5,7 +5,7 @@ from vector_store.pipeline import run_vector_store_pipeline
 from candidates.generate_candidates import generate_candidates
 from features.labels import split_user_history, split_training_history, add_labels
 from features.analysis import analyze_candidates, analyze_features,analyze_labels, analyze_candidate_recall
-from training.negative_sampling import sample_negatives
+from training.negative_sampling import add_candidate_hardness_scores, sample_negatives_by_hardness
 from pathlib import Path
 import pandas as pd
 
@@ -32,19 +32,19 @@ def main():
         interaction_df,
         val_size=0.1,
         test_size=0.1,
-        random_state=42,
+        random_state=42
     )
 
     # Vector retrieval infrastructure
     faiss_index, track_id_mapping = run_vector_store_pipeline(track_embeddings)
 
-    # ========== TRAINING CANDIDATES ==========
+    # ==================== TRAINING CANDIDATES ====================
 
     # Training-period split: 80/20
     train_history, train_targets = split_training_history(
         train_interactions,
         target_size=0.2,
-        random_state=42,
+        random_state=42
     )
 
     # Candidates generation
@@ -75,22 +75,37 @@ def main():
     analyze_labels(train_feature_df)
     analyze_candidate_recall(train_candidates, train_targets)
 
-    # Training-data preparation
-    training_df = sample_negatives(
+    # Persist full training data
+    feature_path = Path("artifacts/features/full_train_features_50_100_50_2600.parquet")
+    feature_path.parent.mkdir(parents=True, exist_ok=True)
+    train_feature_df.to_parquet(feature_path, index=False)
+
+    # Add hardness information
+    train_feature_df = add_candidate_hardness_scores(
         train_feature_df,
-        negatives_per_positive=10,
-        hard_ratio=0.50,
-        medium_ratio=0.30,
-        random_ratio=0.20,
-        random_state=42,
+        user_col="user_id"
     )
 
-    # Persist training data
-    feature_path = Path("artifacts/features/train_features_50_100_50_2600.parquet")
+    # Sample negatives
+    training_df = sample_negatives_by_hardness(
+        train_feature_df,
+        negatives_per_positive=10,
+        user_col="user_id",
+        label_col="label",
+        random_state=42
+    )
+
+    # Analysis - SAMPLED TRAINING CANDIDATE POOL
+    # print("\n========== Analysis - SAMPLED TRAINING CANDIDATE POOL ==========")
+    # analyze_features(training_df)
+    # analyze_labels(training_df)
+
+    # Persist sampled training data
+    feature_path = Path("artifacts/features/sampled_train_features_50_100_50_2600.parquet")
     feature_path.parent.mkdir(parents=True, exist_ok=True)
     training_df.to_parquet(feature_path, index=False)
 
-    # ========== VALIDATION CANDIDATES ==========
+    # ==================== VALIDATION CANDIDATES ====================
 
     val_candidates = generate_candidates(
         tracks_df=tracks_df,
@@ -103,17 +118,17 @@ def main():
         k_track_candidates=50,
         k_artist_candidates=100,
         k_artists=50,
-        k_vector_candidates=2600,
+        k_vector_candidates=2600
     )
 
     val_feature_df = build_candidate_features(
         candidates=val_candidates,
-        interaction_df=train_interactions,
+        interaction_df=train_interactions
     )
 
     val_feature_df = add_labels(
         val_feature_df,
-        val_interactions,
+        val_interactions
     )
 
     # Analysis - VALIDATION CANDIDATE POOL
@@ -128,11 +143,11 @@ def main():
     feature_path.parent.mkdir(parents=True, exist_ok=True)
     val_feature_df.to_parquet(feature_path, index=False)
 
-    # ========== TEST CANDIDATES ==========
+    # ==================== TEST CANDIDATES ====================
 
     test_history = pd.concat(
         [train_interactions, val_interactions],
-        ignore_index=True,
+        ignore_index=True
     )
 
     test_candidates = generate_candidates(
@@ -146,17 +161,17 @@ def main():
         k_track_candidates=50,
         k_artist_candidates=100,
         k_artists=50,
-        k_vector_candidates=2600,
+        k_vector_candidates=2600
     )
 
     test_feature_df = build_candidate_features(
         candidates=test_candidates,
-        interaction_df=test_history,
+        interaction_df=test_history
     )
 
     test_feature_df = add_labels(
         test_feature_df,
-        test_interactions,
+        test_interactions
     )
 
     # Analysis - TEST CANDIDATE POOL
