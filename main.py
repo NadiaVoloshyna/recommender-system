@@ -6,6 +6,7 @@ from candidates.generate_candidates import generate_candidates
 from features.labels import split_user_history, split_training_history, add_labels
 from features.analysis import analyze_candidates, analyze_features,analyze_labels, analyze_candidate_recall
 from training.negative_sampling import add_candidate_hardness_scores, sample_negatives_by_hardness
+from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES, TEST_FEATURES
 from pathlib import Path
 import pandas as pd
 
@@ -76,9 +77,8 @@ def main():
     analyze_candidate_recall(train_candidates, train_targets)
 
     # Persist full training data
-    feature_path = Path("artifacts/features/full_train_features_50_100_50_2600.parquet")
-    feature_path.parent.mkdir(parents=True, exist_ok=True)
-    train_feature_df.to_parquet(feature_path, index=False)
+    FULL_TRAIN_FEATURES.parent.mkdir(parents=True, exist_ok=True)
+    train_feature_df.to_parquet(FULL_TRAIN_FEATURES, index=False)
 
     # Add hardness information
     train_feature_df = add_candidate_hardness_scores(
@@ -101,9 +101,8 @@ def main():
     # analyze_labels(training_df)
 
     # Persist sampled training data
-    feature_path = Path("artifacts/features/sampled_train_features_50_100_50_2600.parquet")
-    feature_path.parent.mkdir(parents=True, exist_ok=True)
-    training_df.to_parquet(feature_path, index=False)
+    SAMPLED_TRAIN_FEATURES.parent.mkdir(parents=True, exist_ok=True)
+    training_df.to_parquet(SAMPLED_TRAIN_FEATURES, index=False)
 
     # ==================== VALIDATION CANDIDATES ====================
 
@@ -139,9 +138,8 @@ def main():
     # analyze_candidate_recall(val_candidates, val_interactions)
 
     # Persist validation data
-    feature_path = Path("artifacts/features/val_features_50_100_50_2600.parquet")
-    feature_path.parent.mkdir(parents=True, exist_ok=True)
-    val_feature_df.to_parquet(feature_path, index=False)
+    VAL_FEATURES.parent.mkdir(parents=True, exist_ok=True)
+    val_feature_df.to_parquet(VAL_FEATURES, index=False)
 
     # ==================== TEST CANDIDATES ====================
 
@@ -182,16 +180,17 @@ def main():
     # analyze_candidate_recall(test_candidates, test_interactions)
 
     # Persist test data
-    feature_path = Path("artifacts/features/test_features_50_100_50_2600.parquet")
-    feature_path.parent.mkdir(parents=True, exist_ok=True)
-    test_feature_df.to_parquet(feature_path, index=False)
+    TEST_FEATURES.parent.mkdir(parents=True, exist_ok=True)
+    test_feature_df.to_parquet(TEST_FEATURES, index=False)
 
-    # Train ranker
-    # model = train_model(training_df)
+    # Train final model
+    # final_model = train_model(training_df)
 
-    # Validation/test evaluation
-    # val_predictions = model.predict(val_feature_df)
-    # test_predictions = model.predict(test_feature_df)
+    # Validate
+    # evaluate_model(model, val_feature_df)
+
+    # Final test
+    # evaluate_model(model, test_feature_df)
 
 
 if __name__ == "__main__":

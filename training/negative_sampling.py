@@ -171,4 +171,18 @@ def sample_negatives_by_hardness(
     if not sampled_users:
         return df.iloc[0:0].copy()
 
-    return pd.concat(sampled_users, ignore_index=True)
+    temp_columns = [
+        "source_interaction_strength_log_rank",
+        "vector_similarity_score_rank",
+        "artist_similarity_score_rank",
+        "track_similarity_score_rank",
+        "candidate_relative_global_popularity_rank",
+        "hardness_score",
+        "hardness_percentile",
+        "hardness_bucket"
+    ]
+
+    result = pd.concat(sampled_users, ignore_index=True)
+    result = result.drop(columns=temp_columns, errors="ignore")
+
+    return result

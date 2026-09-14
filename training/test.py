@@ -1,4 +1,4 @@
-from training.negative_sampling import \
+from train_baseline.negative_sampling import \
     add_candidate_hardness_scores, \
     HARDNESS_FEATURES, \
     sample_negatives_by_hardness, \
