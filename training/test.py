@@ -1,5 +1,6 @@
 from training.negative_sampling import add_candidate_hardness_scores, HARDNESS_FEATURES, sample_negatives_by_hardness
 from training.preprocessing import fit_transform_features, transform_features, COLUMNS_TO_DROP, COLUMNS_TO_SCALE
+from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -327,6 +328,71 @@ def test_transform_features_uses_fitted_scaler():
         pd.DataFrame(expected, columns=COLUMNS_TO_SCALE))
 
 
+# precision_at_k() calculates correctly
+def test_precision_at_k_calculates_correctly():
+    df = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2, 2],
+        "track_id": [10, 20, 30, 40, 50, 60],
+        "label": [1, 0, 1, 0, 1, 1],
+        "score": [0.9, 0.8, 0.7, 0.95, 0.85, 0.75]})
+
+    result = precision_at_k(df, k=2)
+
+    assert result == pytest.approx(0.5)
+
+
+# recall_at_k() calculates correctly
+def test_recall_at_k_calculates_correctly():
+    df = pd.DataFrame({
+        "user_id": [1, 1, 1, 2, 2, 2],
+        "track_id": [10, 20, 30, 40, 50, 60],
+        "label": [1, 1, 0, 1, 0, 0],
+        "score": [0.9, 0.8, 0.7, 0.95, 0.85, 0.75]})
+
+    result = recall_at_k(df, k=2)
+
+    assert result == pytest.approx(1.0)
+
+
+# recall_at_k() ignores_users_with_no_relevant_tracks
+def test_recall_at_k_ignores_users_with_no_relevant_tracks():
+    df = pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "track_id": [10, 20, 30, 40],
+        "label": [1, 0, 0, 0],
+        "score": [0.9, 0.8, 0.95, 0.85]})
+
+    result = recall_at_k(df, k=1)
+
+    assert result == pytest.approx(1.0)
+
+
+# ndcg_at_k() calculates correctly
+def test_ndcg_at_k_calculates_correctly():
+    df = pd.DataFrame({
+        "user_id": [1, 1, 1],
+        "track_id": [10, 20, 30],
+        "label": [1, 0, 1],
+        "score": [0.9, 0.8, 0.7]})
+
+    result = ndcg_at_k(df, k=2)
+
+    expected = 1 / (1 + 1 / np.log2(3))
+
+    assert result == pytest.approx(expected)
+
+
+# ndcg_at_k() ignores users with no relevant tracks
+def test_ndcg_at_k_ignores_users_with_no_relevant_tracks():
+    df = pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "track_id": [10, 20, 30, 40],
+        "label": [1, 0, 0, 0],
+        "score": [0.9, 0.8, 0.95, 0.85]})
+
+    result = ndcg_at_k(df, k=2)
+
+    assert result == pytest.approx(1.0)
 
 
 

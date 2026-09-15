@@ -21,20 +21,18 @@ def train_baseline(X_train, y_train):
 X_train_full, scaler_full = fit_transform_features(full_train_features)
 y_train_full = full_train_features["label"]
 
+model = train_baseline(X_train_full, y_train_full)
+
 X_val = transform_features(val_features, scaler_full)
 y_val = val_features["label"]
 
-model = train_baseline(X_train_full, y_train_full)
-
-# Evaluation
 val_pred = model.predict_proba(X_val)[:, 1]
-
-auc = roc_auc_score(y_val, val_pred)
 
 val_results = val_features[["user_id", "track_id", "label"]].copy()
 val_results["score"] = val_pred
-
 results = evaluate_ranker(val_results, ks=[10, 20])
+
+auc = roc_auc_score(y_val, val_pred)
 
 print("\n=== Original, highly imbalanced dataset ===")
 print(f"Validation AUC: {auc:.4f}")
