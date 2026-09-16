@@ -1,9 +1,11 @@
 from training.negative_sampling import add_candidate_hardness_scores, HARDNESS_FEATURES, sample_negatives_by_hardness
 from training.preprocessing import fit_transform_features, transform_features, COLUMNS_TO_DROP, COLUMNS_TO_SCALE
 from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
+from training.train_baseline import train_baseline
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 import pytest
 
 
@@ -395,5 +397,102 @@ def test_ndcg_at_k_ignores_users_with_no_relevant_tracks():
     assert result == pytest.approx(1.0)
 
 
+@pytest.fixture
+def train_data():
+    return pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "track_id": ["a", "b", "a", "b"],
+        "source_interaction_strength": [0.1, 0.2, 0.3, 0.4],
+        "global_popularity": [1.0, 2.0, 3.0, 4.0],
+        "source_interaction_strength_log": [0.1, 0.2, 0.3, 0.4],
+        "n_sources": [1, 2, 1, 2],
+        "track_similarity_score": [0.2, 0.3, 0.4, 0.5],
+        "artist_similarity_score": [0.3, 0.4, 0.5, 0.6],
+        "vector_similarity_score": [0.4, 0.5, 0.6, 0.7],
+        "max_similarity": [0.4, 0.5, 0.6, 0.7],
+        "mean_similarity_available": [0.3, 0.4, 0.5, 0.6],
+        "mean_similarity_all": [0.3, 0.4, 0.5, 0.6],
+        "track_interaction_signal": [0.1, 0.2, 0.3, 0.4],
+        "artist_interaction_signal": [0.1, 0.2, 0.3, 0.4],
+        "vector_interaction_signal": [0.1, 0.2, 0.3, 0.4],
+        "global_popularity_log": [1.0, 2.0, 3.0, 4.0],
+        "candidate_relative_global_popularity": [0.1, 0.2, 0.3, 0.4],
+        "label": [1, 0, 0, 1]})
 
 
+@pytest.fixture
+def val_data():
+    return pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "track_id": ["a", "b", "a", "b"],
+        "source_interaction_strength": [0.15, 0.25, 0.35, 0.45],
+        "global_popularity": [1.5, 2.5, 3.5, 4.5],
+        "source_interaction_strength_log": [0.15, 0.25, 0.35, 0.45],
+        "n_sources": [1, 2, 1, 2],
+        "track_similarity_score": [0.25, 0.35, 0.45, 0.55],
+        "artist_similarity_score": [0.35, 0.45, 0.55, 0.65],
+        "vector_similarity_score": [0.45, 0.55, 0.65, 0.75],
+        "max_similarity": [0.45, 0.55, 0.65, 0.75],
+        "mean_similarity_available": [0.35, 0.45, 0.55, 0.65],
+        "mean_similarity_all": [0.35, 0.45, 0.55, 0.65],
+        "track_interaction_signal": [0.15, 0.25, 0.35, 0.45],
+        "artist_interaction_signal": [0.15, 0.25, 0.35, 0.45],
+        "vector_interaction_signal": [0.15, 0.25, 0.35, 0.45],
+        "global_popularity_log": [1.5, 2.5, 3.5, 4.5],
+        "candidate_relative_global_popularity": [0.15, 0.25, 0.35, 0.45],
+        "label": [1, 0, 0, 1]})
+
+
+# train_baseline() rejects invalid input
+def test_train_baseline_rejects_invalid_input(train_data, val_data):
+    with pytest.raises(TypeError):
+        train_baseline(
+            train_data.to_numpy(),
+            train_data,
+            val_data)
+
+    with pytest.raises(TypeError):
+        train_baseline(
+            train_data,
+            train_data.to_numpy(),
+            val_data)
+
+    with pytest.raises(TypeError):
+        train_baseline(
+            train_data,
+            train_data,
+            val_data.to_numpy())
+
+
+# train_baseline() returns expected objects
+def test_train_baseline_returns_expected_objects(train_data, val_data):
+    model, scaler, metrics = train_baseline(
+        train_data,
+        train_data,
+        val_data)
+
+    assert isinstance(model, LogisticRegression)
+    assert isinstance(scaler, StandardScaler)
+    assert isinstance(metrics, dict)
+
+
+# train_baseline() returns all metrics
+def test_train_baseline_returns_all_metrics(train_data, val_data):
+    _, _, metrics = train_baseline(
+        train_data,
+        train_data,
+        val_data)
+
+    assert set(metrics.keys()) == {"full", "sampled"}
+
+    expected_metrics = {
+        "auc",
+        "precision@10",
+        "recall@10",
+        "ndcg@10",
+        "precision@20",
+        "recall@20",
+        "ndcg@20"}
+
+    assert set(metrics["full"].keys()) == expected_metrics
+    assert set(metrics["sampled"].keys()) == expected_metrics

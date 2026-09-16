@@ -1,73 +1,123 @@
 import pandas as pd
-from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES
+from pprint import pprint
 from preprocessing import fit_transform_features, transform_features
 from evaluation import evaluate_ranker
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-
-# Load data
-full_train_features = pd.read_parquet(FULL_TRAIN_FEATURES)
-sampled_train_features = pd.read_parquet(SAMPLED_TRAIN_FEATURES)
-val_features = pd.read_parquet(VAL_FEATURES)
+from sklearn.preprocessing import StandardScaler
 
 
-def train_baseline(X_train, y_train):
-    model = LogisticRegression(max_iter=1000, random_state=42)
-    model.fit(X_train, y_train)
-    return model
+def train_baseline(
+        full_train_features: pd.DataFrame,
+        sampled_train_features: pd.DataFrame,
+        val_features: pd.DataFrame
+) -> tuple[LogisticRegression, StandardScaler, dict]:
+    """
+    Train and compare two logistic-regression baseline models.
+    The first model is trained on the full, highly imbalanced training dataset using class weighting.
+    The second model is trained on a negatively sampled training dataset. Both models are evaluated on
+    the same validation dataset using AUC, Precision@K, Recall@K, and NDCG@K.
+    The model with the higher NDCG@10 is selected and returned, together with its feature scaler and
+    the evaluation metrics for both baseline models.
+    :param full_train_features: training dataset containing the engineered ranking features and binary labels,
+    including the original class distribution (pd.DataFrame)
+    :param sampled_train_features: training dataset containing the engineered ranking features and binary
+    labels after negative sampling (pd.DataFrame)
+    :param val_features: validation dataset containing the same engineered ranking features
+    and binary labels (pd.DataFrame)
+    :return:
+        tuple[LogisticRegression, StandardScaler, dict]: the selected logistic-regression model, the feature scaler
+        fitted on the corresponding training dataset, and a dictionary
+        containing the evaluation metrics for both baseline models.
+    """
+    if not isinstance(full_train_features, pd.DataFrame):
+        raise TypeError("full_train_features must be a pandas DataFrame")
 
+    if not isinstance(sampled_train_features, pd.DataFrame):
+        raise TypeError("sampled_train_features must be a pandas DataFrame")
 
-# Train baseline model on the original, highly imbalanced dataset
-X_train_full, scaler_full = fit_transform_features(full_train_features)
-y_train_full = full_train_features["label"]
+    if not isinstance(val_features, pd.DataFrame):
+        raise TypeError("val_features must be a pandas DataFrame")
 
-model = train_baseline(X_train_full, y_train_full)
+    # Model 1: Full, highly imbalanced dataset
+    model_full = LogisticRegression(
+        max_iter=2000,
+        class_weight="balanced",
+        random_state=42
+    )
 
-X_val = transform_features(val_features, scaler_full)
-y_val = val_features["label"]
+    X_train_full, scaler_full = fit_transform_features(full_train_features)
+    y_train_full = full_train_features["label"]
 
-val_pred = model.predict_proba(X_val)[:, 1]
+    model_full.fit(X_train_full, y_train_full)
 
-val_results = val_features[["user_id", "track_id", "label"]].copy()
-val_results["score"] = val_pred
-results = evaluate_ranker(val_results, ks=[10, 20])
+    X_val_full = transform_features(val_features, scaler_full)
+    y_val = val_features["label"]
 
-auc = roc_auc_score(y_val, val_pred)
+    val_pred_full = model_full.predict_proba(X_val_full)[:, 1]
 
-print("\n=== Original, highly imbalanced dataset ===")
-print(f"Validation AUC: {auc:.4f}")
+    val_results_full = val_features[["user_id", "track_id", "label"]].copy()
+    val_results_full["score"] = val_pred_full
+    results_full = evaluate_ranker(val_results_full, ks=[10, 20])
 
-for k, metrics in results.items():
-    print(f"\nK = {k}")
-    print(f"Precision@{k}: {metrics['precision']:.4f}")
-    print(f"Recall@{k}:    {metrics['recall']:.4f}")
-    print(f"NDCG@{k}:      {metrics['ndcg']:.4f}")
+    auc_full = roc_auc_score(y_val, val_pred_full)
 
-# Train baseline model on the negatively sampled dataset
-X_train_sampled, scaler_sampled = fit_transform_features(sampled_train_features)
-y_train_sampled = sampled_train_features["label"]
+    # Model 2: Negatively sampled dataset
+    model_sampled = LogisticRegression(
+        max_iter=2000,
+        random_state=42
+    )
 
-X_val = transform_features(val_features, scaler_sampled)
-y_val = val_features["label"]
+    X_train_sampled, scaler_sampled = fit_transform_features(sampled_train_features)
+    y_train_sampled = sampled_train_features["label"]
 
-model = train_baseline(X_train_sampled, y_train_sampled)
+    model_sampled.fit(X_train_sampled, y_train_sampled)
 
-# Evaluation
-val_pred = model.predict_proba(X_val)[:, 1]
+    X_val_sampled = transform_features(val_features, scaler_sampled)
+    y_val = val_features["label"]
 
-auc = roc_auc_score(y_val, val_pred)
+    val_pred_sampled = model_sampled.predict_proba(X_val_sampled)[:, 1]
 
-val_results = val_features[["user_id", "track_id", "label"]].copy()
-val_results["score"] = val_pred
+    val_results_sampled = val_features[["user_id", "track_id", "label"]].copy()
+    val_results_sampled["score"] = val_pred_sampled
+    results_sampled = evaluate_ranker(val_results_sampled, ks=[10, 20])
 
-results = evaluate_ranker(val_results, ks=[10, 20])
+    auc_sampled = roc_auc_score(y_val, val_pred_sampled)
 
-print("\n=== Negatively sampled dataset ===")
-print(f"Validation AUC: {auc:.4f}")
+    # Store metrics for both models
+    metrics = {
+        "full": {
+            "auc": auc_full,
+            "precision@10": results_full[10]["precision"],
+            "recall@10": results_full[10]["recall"],
+            "ndcg@10": results_full[10]["ndcg"],
+            "precision@20": results_full[20]["precision"],
+            "recall@20": results_full[20]["recall"],
+            "ndcg@20": results_full[20]["ndcg"],
+        },
+        "sampled": {
+            "auc": auc_sampled,
+            "precision@10": results_sampled[10]["precision"],
+            "recall@10": results_sampled[10]["recall"],
+            "ndcg@10": results_sampled[10]["ndcg"],
+            "precision@20": results_sampled[20]["precision"],
+            "recall@20": results_sampled[20]["recall"],
+            "ndcg@20": results_sampled[20]["ndcg"],
+        }
+    }
 
-for k, metrics in results.items():
-    print(f"\nK = {k}")
-    print(f"Precision@{k}: {metrics['precision']:.4f}")
-    print(f"Recall@{k}:    {metrics['recall']:.4f}")
-    print(f"NDCG@{k}:      {metrics['ndcg']:.4f}")
+    print("\n====== Baseline comparison ======")
+    pprint(metrics)
+
+    # Select model based on NDCG@10
+    if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:
+        print("\nSelected model: Full dataset")
+        print(f"Selected based on NDCG@10 = {metrics['full']['ndcg@10']:.4f}")
+        return model_full, scaler_full, metrics
+
+    else:
+        print("\nSelected model: Negatively sampled dataset")
+        print(f"Selected based on NDCG@10 = {metrics['sampled']['ndcg@10']:.4f}")
+        return model_sampled, scaler_sampled, metrics
+
 

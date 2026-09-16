@@ -7,7 +7,7 @@ from features.labels import split_user_history, split_training_history, add_labe
 from features.analysis import analyze_candidates, analyze_features,analyze_labels, analyze_candidate_recall
 from training.negative_sampling import add_candidate_hardness_scores, sample_negatives_by_hardness
 from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES, TEST_FEATURES
-from pathlib import Path
+from training.pipeline import run_training_pipeline
 import pandas as pd
 
 
@@ -184,7 +184,7 @@ def main():
     test_feature_df.to_parquet(TEST_FEATURES, index=False)
 
     # Train final model
-    # final_model = train_model(training_df)
+    final_model = run_training_pipeline()
 
     # Validate
     # evaluate_model(model, val_feature_df)
