@@ -466,7 +466,7 @@ def test_train_baseline_rejects_invalid_input(train_data, val_data):
 
 # train_baseline() returns expected objects
 def test_train_baseline_returns_expected_objects(train_data, val_data):
-    model, scaler, metrics = train_baseline(
+    model, scaler, metrics, selected_source = train_baseline(
         train_data,
         train_data,
         val_data)
@@ -474,11 +474,12 @@ def test_train_baseline_returns_expected_objects(train_data, val_data):
     assert isinstance(model, LogisticRegression)
     assert isinstance(scaler, StandardScaler)
     assert isinstance(metrics, dict)
+    assert isinstance(selected_source, str)
 
 
 # train_baseline() returns all metrics
 def test_train_baseline_returns_all_metrics(train_data, val_data):
-    _, _, metrics = train_baseline(
+    _, _, metrics, _ = train_baseline(
         train_data,
         train_data,
         val_data)

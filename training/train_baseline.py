@@ -1,17 +1,116 @@
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from pprint import pprint
-from preprocessing import fit_transform_features, transform_features
-from evaluation import evaluate_ranker
+from training.preprocessing import fit_transform_features, transform_features
+from training.evaluation import evaluate_ranker
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
+
+
+def plot_baseline_comparison(metrics: dict):
+    metrics_to_plot = [
+        "auc",
+        "ndcg@10",
+        "ndcg@20",
+        "precision@10",
+        "precision@20",
+        "recall@10",
+        "recall@20",
+    ]
+
+    labels = [
+        "AUC",
+        "NDCG@10",
+        "NDCG@20",
+        "Precision@10",
+        "Precision@20",
+        "Recall@10",
+        "Recall@20",
+    ]
+
+    full = [metrics["full"][m] for m in metrics_to_plot]
+    sampled = [metrics["sampled"][m] for m in metrics_to_plot]
+
+    x = np.arange(len(labels))
+    width = 0.34
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+
+    full_colour = "#4C78A8"
+    sampled_colour = "#F58518"
+
+    bars_full = ax.bar(
+        x - width / 2,
+        full,
+        width,
+        label="Full (1:240)",
+        color=full_colour,
+        alpha=0.9
+    )
+
+    bars_sampled = ax.bar(
+        x + width / 2,
+        sampled,
+        width,
+        label="Sampled (1:10)",
+        color=sampled_colour,
+        alpha=0.9
+    )
+
+    # Add values above bars
+    for bars in [bars_full, bars_sampled]:
+        for bar in bars:
+            height = bar.get_height()
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                height + 0.008,
+                f"{height:.3f}",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                color="#333333"
+            )
+
+    ax.set_title(
+        "Logistic Regression Baseline Comparison",
+        fontsize=17,
+        fontweight="bold",
+        pad=18,
+        alpha=0.8
+    )
+    ax.set_ylabel("Validation Score", fontsize=13)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=11)
+    ax.set_axisbelow(True)
+    ax.grid(
+        axis="y",
+        linestyle="--",
+        linewidth=0.7,
+        alpha=0.3,
+    )
+    ax.grid(axis="x", visible=False)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.set_ylim(0, 1)
+    ax.legend(
+        frameon=False,
+        ncol=2,
+        loc="upper right",
+        fontsize=13,
+        bbox_to_anchor=(1, 0.95)
+    )
+
+    plt.tight_layout()
+    plt.show()
 
 
 def train_baseline(
         full_train_features: pd.DataFrame,
         sampled_train_features: pd.DataFrame,
         val_features: pd.DataFrame
-) -> tuple[LogisticRegression, StandardScaler, dict]:
+) -> tuple[LogisticRegression, StandardScaler, dict, str]:
     """
     Train and compare two logistic-regression baseline models.
     The first model is trained on the full, highly imbalanced training dataset using class weighting.
@@ -26,9 +125,11 @@ def train_baseline(
     :param val_features: validation dataset containing the same engineered ranking features
     and binary labels (pd.DataFrame)
     :return:
-        tuple[LogisticRegression, StandardScaler, dict]: the selected logistic-regression model, the feature scaler
-        fitted on the corresponding training dataset, and a dictionary
-        containing the evaluation metrics for both baseline models.
+        tuple[LogisticRegression, StandardScaler, dict, str]:
+            The selected logistic-regression model, the feature scaler fitted
+            on the corresponding training dataset, a dictionary containing the
+            evaluation metrics for both baseline models, and a string identifying
+            the selected model ("full" or "sampled").
     """
     if not isinstance(full_train_features, pd.DataFrame):
         raise TypeError("full_train_features must be a pandas DataFrame")
@@ -41,7 +142,7 @@ def train_baseline(
 
     # Model 1: Full, highly imbalanced dataset
     model_full = LogisticRegression(
-        max_iter=2000,
+        max_iter=1000,
         class_weight="balanced",
         random_state=42
     )
@@ -64,7 +165,7 @@ def train_baseline(
 
     # Model 2: Negatively sampled dataset
     model_sampled = LogisticRegression(
-        max_iter=2000,
+        max_iter=1000,
         random_state=42
     )
 
@@ -109,15 +210,12 @@ def train_baseline(
     print("\n====== Baseline comparison ======")
     pprint(metrics)
 
+    # plot_baseline_comparison(metrics)
+
     # Select model based on NDCG@10
     if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:
-        print("\nSelected model: Full dataset")
-        print(f"Selected based on NDCG@10 = {metrics['full']['ndcg@10']:.4f}")
-        return model_full, scaler_full, metrics
-
+        return model_full, scaler_full, metrics, "full"
     else:
-        print("\nSelected model: Negatively sampled dataset")
-        print(f"Selected based on NDCG@10 = {metrics['sampled']['ndcg@10']:.4f}")
-        return model_sampled, scaler_sampled, metrics
+        return model_sampled, scaler_sampled, metrics, "sampled"
 
 
