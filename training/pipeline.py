@@ -1,6 +1,7 @@
 import pandas as pd
 from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES
 from training.train_baseline import train_baseline
+from training.train_nn import train_nn
 
 # Load data
 full_train_features = pd.read_parquet(FULL_TRAIN_FEATURES)
@@ -16,6 +17,8 @@ def run_training_pipeline():
     )
 
     print(f"\nSelected baseline: {baseline_source}")
+
+    nn_model, nn_metrics = train_nn(sampled_train_features, val_features, baseline_scaler)
 
 
 if __name__ == "__main__":
