@@ -97,3 +97,37 @@ def plot_baseline_comparison(metrics: dict):
 
     plt.tight_layout()
     plt.show()
+
+
+def plot_training_history(history):
+    epochs = range(1, len(history["train_loss"]) + 1)
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+    # Loss
+    axes[0].plot(epochs, history["train_loss"], marker="o", label="Train")
+    axes[0].plot(epochs, history["val_loss"], marker="o", label="Validation")
+    axes[0].set_title("Loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].set_ylabel("BCE loss")
+    axes[0].legend()
+    axes[0].grid(alpha=0.3)
+
+    # AUC
+    axes[1].plot(epochs, history["auc"], marker="o", color="tab:green")
+    axes[1].set_title("Validation AUC")
+    axes[1].set_xlabel("Epoch")
+    axes[1].set_ylabel("AUC")
+    axes[1].grid(alpha=0.3)
+
+    # NDCG
+    axes[2].plot(epochs, history["ndcg@10"], marker="o", label="NDCG@10")
+    axes[2].plot(epochs, history["ndcg@20"], marker="o", label="NDCG@20")
+    axes[2].set_title("Ranking quality")
+    axes[2].set_xlabel("Epoch")
+    axes[2].set_ylabel("NDCG")
+    axes[2].legend()
+    axes[2].grid(alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()
+

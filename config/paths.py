@@ -23,4 +23,5 @@ SAMPLED_TRAIN_FEATURES = FEATURES_DIR / "sampled_train_features_50_100_50_2600.p
 VAL_FEATURES = FEATURES_DIR / "val_features_50_100_50_2600.parquet"
 TEST_FEATURES = FEATURES_DIR / "test_features_50_100_50_2600.parquet"
 
-
+# Track embeddings
+TRACK_EMBEDDINGS = DATA_DIR / "track_embeddings.pkl"

@@ -6,9 +6,10 @@ from candidates.generate_candidates import generate_candidates
 from features.labels import split_user_history, split_training_history, add_labels
 from features.analysis import analyze_candidates, analyze_features,analyze_labels, analyze_candidate_recall
 from training.negative_sampling import add_candidate_hardness_scores, sample_negatives_by_hardness
-from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES, TEST_FEATURES
+from config.paths import FULL_TRAIN_FEATURES, SAMPLED_TRAIN_FEATURES, VAL_FEATURES, TEST_FEATURES, TRACK_EMBEDDINGS
 from training.pipeline import run_training_pipeline
 import pandas as pd
+import pickle
 
 
 def main():
@@ -27,6 +28,11 @@ def main():
         tracks_df,
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
+
+    # Persist track embeddings
+    TRACK_EMBEDDINGS.parent.mkdir(parents=True, exist_ok=True)
+    with open(TRACK_EMBEDDINGS, "wb") as f:
+        pickle.dump(track_embeddings, f)
 
     # Interactions outer split: 80/10/10
     train_interactions, val_interactions, test_interactions = split_user_history(

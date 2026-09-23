@@ -1,36 +1,26 @@
 import pandas as pd
-import numpy as np
 import torch
 import torch.nn as nn
+import copy
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
 from training.preprocessing import transform_features
 from training.evaluation import evaluate_ranker
-from pprint import pprint
+from training.utils import plot_training_history
 
-EMBEDDING_DIM = 32
 BATCH_SIZE = 256
 LEARNING_RATE = 0.001
 EPOCHS = 10
-NUMERIC_COLUMNS = 17
 
 
 class NN(nn.Module):
-    def __init__(self, n_users, n_tracks, n_numeric):
+    def __init__(self, n_numeric: int):
         super().__init__()
 
-        self.user_embedding = nn.Embedding(n_users, EMBEDDING_DIM)
-        self.track_embedding = nn.Embedding(n_tracks, EMBEDDING_DIM)
-
-        self.numeric_mlp = nn.Sequential(
-            nn.Linear(n_numeric, 64),
-            nn.ReLU(),
-            nn.Linear(64, 32),
-            nn.ReLU()
-        )
-
         self.ranking_mlp = nn.Sequential(
+            nn.Linear(n_numeric, 128),
+            nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 32),
@@ -38,47 +28,33 @@ class NN(nn.Module):
             nn.Linear(32, 1)
         )
 
-    def forward(self, user_id, track_id, numeric_features):
-        user = self.user_embedding(user_id)
-        track = self.track_embedding(track_id)
-        interaction = user * track
-        numeric = self.numeric_mlp(numeric_features)
-
-        x = torch.cat([user, track, interaction, numeric], dim=1)
-
-        return self.ranking_mlp(x).squeeze(1)
+    def forward(self, numeric_features):
+        return self.ranking_mlp(numeric_features).squeeze(1)
 
 
-def make_tensors(df, scaler, user_to_idx, track_to_idx):
-    # Convert string IDs into integer embedding indices
-    user_ids = (df["user_id"].map(user_to_idx).fillna(0).astype(np.int64).to_numpy())
-    user_ids = torch.tensor(user_ids, dtype=torch.long)
-    track_ids = (df["track_id"].map(track_to_idx).fillna(0).astype(np.int64).to_numpy())
-    track_ids = torch.tensor(track_ids, dtype=torch.long)
-
+def make_tensors(df: pd.DataFrame, scaler: StandardScaler):
     # Transform numerical features
     numeric_features = transform_features(df, scaler)
     numeric_features = torch.tensor(numeric_features.to_numpy(), dtype=torch.float32)
 
     labels = torch.tensor(df["label"].to_numpy(), dtype=torch.float32)
 
-    return user_ids, track_ids, numeric_features, labels
+    return numeric_features, labels
 
 
 def evaluate(model, loader, criterion, device, val_features):
     model.eval()
+
     total_loss = 0
     logits_list = []
     targets_list = []
 
     with torch.no_grad():
-        for user_ids, track_ids, numeric, targets in loader:
-            user_ids = user_ids.to(device)
-            track_ids = track_ids.to(device)
+        for numeric, targets in loader:
             numeric = numeric.to(device)
             targets = targets.to(device)
 
-            logits = model(user_ids, track_ids, numeric)
+            logits = model(numeric)
             loss = criterion(logits, targets)
             total_loss += (loss.item() * len(targets))
 
@@ -99,17 +75,14 @@ def evaluate(model, loader, criterion, device, val_features):
     ranking_results = evaluate_ranker(val_results, ks=[10, 20])
 
     metrics = {
-        "loss": avg_loss,
+        "val_loss": avg_loss,
         "auc": auc,
         "precision@10": ranking_results[10]["precision"],
         "recall@10": ranking_results[10]["recall"],
         "ndcg@10": ranking_results[10]["ndcg"],
         "precision@20": ranking_results[20]["precision"],
         "recall@20": ranking_results[20]["recall"],
-        "ndcg@20": ranking_results[20]["ndcg"],
-        "logits": logits,
-        "probs": probs,
-        "targets": targets
+        "ndcg@20": ranking_results[20]["ndcg"]
     }
 
     return metrics
@@ -122,38 +95,44 @@ def train_nn(
 ) -> tuple[NN, dict]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Create id mappings
-    user_to_idx = {x: i + 1 for i, x in enumerate(sampled_train_features["user_id"].unique())}
-    track_to_idx = {x: i + 1 for i, x in enumerate(sampled_train_features["track_id"].unique())}
-
-    train_tensors = make_tensors(sampled_train_features, scaler, user_to_idx, track_to_idx)
-    val_tensors = make_tensors(val_features, scaler, user_to_idx, track_to_idx)
+    train_tensors = make_tensors(sampled_train_features, scaler)
+    val_tensors = make_tensors(val_features, scaler)
+    n_numeric = train_tensors[0].shape[1]
 
     train_loader = DataLoader(TensorDataset(*train_tensors), batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(TensorDataset(*val_tensors), batch_size=BATCH_SIZE, shuffle=False)
 
-    model = NN(
-        n_users=len(user_to_idx) + 1,
-        n_tracks=len(track_to_idx) + 1,
-        n_numeric=NUMERIC_COLUMNS,
-    ).to(device)
+    model = NN(n_numeric=n_numeric).to(device)
 
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    best_ndcg = float("-inf")
+    best_state = copy.deepcopy(model.state_dict())
+    best_metrics = None
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "auc": [],
+        "precision@10": [],
+        "recall@10": [],
+        "ndcg@10": [],
+        "precision@20": [],
+        "recall@20": [],
+        "ndcg@20": [],
+    }
 
     for epoch in range(EPOCHS):
         model.train()
         train_loss = 0
 
-        for user_ids, track_ids, numeric, targets in train_loader:
-            user_ids = user_ids.to(device)
-            track_ids = track_ids.to(device)
+        for numeric, targets in train_loader:
             numeric = numeric.to(device)
             targets = targets.to(device)
 
             optimizer.zero_grad()
 
-            logits = model(user_ids, track_ids, numeric)
+            logits = model(numeric)
             loss = criterion(logits, targets)
 
             loss.backward()
@@ -164,35 +143,39 @@ def train_nn(
         train_loss /= len(train_loader.dataset)
 
         metrics = evaluate(model, val_loader, criterion, device, val_features)
+        if metrics["ndcg@10"] > best_ndcg:
+            best_ndcg = metrics["ndcg@10"]
+            best_state = copy.deepcopy(model.state_dict())
+            best_metrics = metrics.copy()
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(metrics["val_loss"])
+        history["auc"].append(metrics["auc"])
+        history["precision@10"].append(metrics["precision@10"])
+        history["recall@10"].append(metrics["recall@10"])
+        history["ndcg@10"].append(metrics["ndcg@10"])
+        history["precision@20"].append(metrics["precision@20"])
+        history["recall@20"].append(metrics["recall@20"])
+        history["ndcg@20"].append(metrics["ndcg@20"])
 
         print(
-            f"Epoch {epoch + 1}/{EPOCHS} "
-            f"train_loss={train_loss:.4f} "
-            f"val_loss={metrics['loss']:.4f} "
-            f"auc={metrics['auc']:.4f} "
-            f"precision@10={metrics['precision@10']:.4f} "
-            f"recall@10={metrics['recall@10']:.4f} "
-            f"ndcg@10={metrics['ndcg@10']:.4f} "
-            f"precision@20={metrics['precision@20']:.4f} "
-            f"recall@20={metrics['recall@20']:.4f} "
+            f"Epoch {epoch + 1}/{EPOCHS}   "
+            f"train_loss={train_loss:.4f}   "
+            f"val_loss={metrics['val_loss']:.4f}   "
+            f"auc={metrics['auc']:.4f}   "
+            f"precision@10={metrics['precision@10']:.4f}   "
+            f"recall@10={metrics['recall@10']:.4f}   "
+            f"ndcg@10={metrics['ndcg@10']:.4f}   "
+            f"precision@20={metrics['precision@20']:.4f}   "
+            f"recall@20={metrics['recall@20']:.4f}   "
             f"ndcg@20={metrics['ndcg@20']:.4f}"
         )
 
-    print("\n====== NN Final Metrics ======")
-    final_metrics = {
-        "auc": metrics['auc'],
-        "precision@10": metrics['precision@10'],
-        "recall@10": metrics['recall@10'],
-        "ndcg@10": metrics['ndcg@10'],
-        "precision@20": metrics['precision@20'],
-        "recall@20": metrics['recall@20'],
-        "ndcg@20": metrics['ndcg@20']
-    }
-    pprint(final_metrics)
+    # Restore best model
+    model.load_state_dict(best_state)
+    plot_training_history(history)
 
-    return model, metrics
-
-
+    return model, best_metrics
 
 
 

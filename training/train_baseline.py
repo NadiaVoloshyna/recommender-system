@@ -109,15 +109,45 @@ def train_baseline(
         }
     }
 
-    print("\n====== Baseline comparison ======")
-    pprint(metrics)
-
     # plot_baseline_comparison(metrics)
 
     # Select model based on NDCG@10
     if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:
-        return model_full, scaler_full, metrics, "full"
+        return model_full, scaler_full, metrics["full"], "full"
     else:
-        return model_sampled, scaler_sampled, metrics, "sampled"
+        return model_sampled, scaler_sampled, metrics["sampled"], "sampled"
 
+
+"""
+comparison = pd.DataFrame({
+        "full": [
+            auc_full,
+            results_full[10]["precision"],
+            results_full[10]["recall"],
+            results_full[10]["ndcg"],
+            results_full[20]["precision"],
+            results_full[20]["recall"],
+            results_full[20]["ndcg"]
+        ],
+        "sampled": [
+            auc_sampled,
+            results_sampled[10]["precision"],
+            results_sampled[10]["recall"],
+            results_sampled[10]["ndcg"],
+            results_sampled[20]["precision"],
+            results_sampled[20]["recall"],
+            results_sampled[20]["ndcg"]
+        ],
+    }, index=[
+        "AUC",
+        "Precision@10",
+        "Recall@10",
+        "NDCG@10",
+        "Precision@20",
+        "Recall@20",
+        "NDCG@20",
+    ])
+
+    print(comparison)
+"""
 
