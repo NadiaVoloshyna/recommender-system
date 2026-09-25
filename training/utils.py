@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def plot_baseline_comparison(metrics: dict):
+def plot_model_comparison(metrics: dict, title):
     metrics_to_plot = [
         "auc",
         "ndcg@10",
@@ -23,37 +23,28 @@ def plot_baseline_comparison(metrics: dict):
         "Recall@20"
     ]
 
-    full = [metrics["full"][m] for m in metrics_to_plot]
-    sampled = [metrics["sampled"][m] for m in metrics_to_plot]
-
+    models = list(metrics.keys())
     x = np.arange(len(labels))
     width = 0.34
-
     fig, ax = plt.subplots(figsize=(11, 6))
+    colours = ["#4C78A8", "#F58518", "#54A24B", "#E45756"]
 
-    full_colour = "#4C78A8"
-    sampled_colour = "#F58518"
-
-    bars_full = ax.bar(
-        x - width / 2,
-        full,
-        width,
-        label="Full (1:240)",
-        color=full_colour,
-        alpha=0.9
-    )
-
-    bars_sampled = ax.bar(
-        x + width / 2,
-        sampled,
-        width,
-        label="Sampled (1:10)",
-        color=sampled_colour,
-        alpha=0.9
-    )
+    bars_list = []
+    for i, model_name in enumerate(models):
+        values = [metrics[model_name][metric] for metric in metrics_to_plot]
+        offset = (i - (len(models) - 1) / 2) * width
+        bars = ax.bar(
+            x + offset,
+            values,
+            width,
+            label=model_name,
+            color=colours[i % len(colours)],
+            alpha=0.9
+        )
+        bars_list.append(bars)
 
     # Add values above bars
-    for bars in [bars_full, bars_sampled]:
+    for bars in bars_list:
         for bar in bars:
             height = bar.get_height()
             ax.text(
@@ -67,7 +58,7 @@ def plot_baseline_comparison(metrics: dict):
             )
 
     ax.set_title(
-        "Logistic Regression Baseline Comparison",
+        title,
         fontsize=17,
         fontweight="bold",
         pad=18,
@@ -89,7 +80,7 @@ def plot_baseline_comparison(metrics: dict):
     ax.set_ylim(0, 1)
     ax.legend(
         frameon=False,
-        ncol=2,
+        ncol=len(models),
         loc="upper right",
         fontsize=13,
         bbox_to_anchor=(1, 0.95)

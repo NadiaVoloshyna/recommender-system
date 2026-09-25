@@ -1,11 +1,10 @@
 import pandas as pd
-from pprint import pprint
 from training.preprocessing import fit_transform_features, transform_features
 from training.evaluation import evaluate_ranker
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
 from sklearn.preprocessing import StandardScaler
-from training.utils import plot_baseline_comparison
+from training.utils import plot_model_comparison
 
 
 def train_baseline(
@@ -87,7 +86,6 @@ def train_baseline(
 
     auc_sampled = roc_auc_score(y_val, val_pred_sampled)
 
-    # Store metrics for both models
     metrics = {
         "full": {
             "auc": auc_full,
@@ -109,45 +107,17 @@ def train_baseline(
         }
     }
 
-    # plot_baseline_comparison(metrics)
+    comparison = {
+        "Full": metrics["full"],
+        "Sampled": metrics["sampled"]
+    }
+
+    plot_model_comparison(comparison, "Logistic Regression Baseline Comparison")
 
     # Select model based on NDCG@10
     if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:
-        return model_full, scaler_full, metrics["full"], "full"
+        return model_full, scaler_full, metrics["full"], "FULL"
     else:
-        return model_sampled, scaler_sampled, metrics["sampled"], "sampled"
+        return model_sampled, scaler_sampled, metrics["sampled"], "SAMPLED"
 
-
-"""
-comparison = pd.DataFrame({
-        "full": [
-            auc_full,
-            results_full[10]["precision"],
-            results_full[10]["recall"],
-            results_full[10]["ndcg"],
-            results_full[20]["precision"],
-            results_full[20]["recall"],
-            results_full[20]["ndcg"]
-        ],
-        "sampled": [
-            auc_sampled,
-            results_sampled[10]["precision"],
-            results_sampled[10]["recall"],
-            results_sampled[10]["ndcg"],
-            results_sampled[20]["precision"],
-            results_sampled[20]["recall"],
-            results_sampled[20]["ndcg"]
-        ],
-    }, index=[
-        "AUC",
-        "Precision@10",
-        "Recall@10",
-        "NDCG@10",
-        "Precision@20",
-        "Recall@20",
-        "NDCG@20",
-    ])
-
-    print(comparison)
-"""
 
