@@ -23,4 +23,6 @@ Current progress:
 
 •	Experiments comparing training on the original imbalanced dataset and negatively sampled data completed
 
-•	Further ranking models planned for comparison
+•	Baseline vs Neural Network ranking experiments completed
+
+•	Model comparison and visualization implemented
