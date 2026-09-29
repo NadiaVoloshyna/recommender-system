@@ -3,14 +3,15 @@ from training.preprocessing import fit_transform_features, transform_features, C
 from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
 from training.train_baseline import train_baseline
 import training.train_nn as train_nn_module
-from training.train_nn import train_nn, NN
+from training.train_nn import train_nn, NN, evaluate
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 import pytest
-import copy
 import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
 
 
 def make_candidate_df():
@@ -588,3 +589,121 @@ def test_train_nn_selects_best_ndcg10(
     assert isinstance(model, NN)
     # Epoch 2 had the highest NDCG@10.
     assert metrics["ndcg@10"] == 0.50
+
+
+class DummyModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.linear = nn.Linear(2, 1)
+
+    def forward(self, x):
+        return self.linear(x)
+
+
+@pytest.fixture
+def validation_data():
+    features = pd.DataFrame({
+        "user_id": [1, 1, 2, 2],
+        "track_id": [10, 11, 10, 12],
+        "label": [1, 0, 1, 0],
+    })
+
+    numeric = torch.tensor([
+        [1.0, 0.0],
+        [0.0, 1.0],
+        [1.0, 1.0],
+        [0.0, 0.0],
+    ])
+
+    targets = torch.tensor([[1.0], [0.0], [1.0], [0.0]])
+
+    loader = DataLoader(
+        TensorDataset(numeric, targets),
+        batch_size=2,
+        shuffle=False,
+    )
+
+    return features, loader
+
+
+@pytest.fixture
+def model():
+    return DummyModel()
+
+
+@pytest.fixture
+def criterion():
+    return nn.BCEWithLogitsLoss()
+
+
+# evaluate() returns loss and metrics
+def test_evaluate_returns_loss_and_metrics(model, validation_data, criterion):
+    val_features, loader = validation_data
+
+    loss, metrics = evaluate(
+        model=model,
+        loader=loader,
+        criterion=criterion,
+        device=torch.device("cpu"),
+        val_features=val_features,
+    )
+
+    assert isinstance(loss, float)
+    assert loss >= 0
+
+    assert set(metrics) == {
+        "auc",
+        "precision@10",
+        "recall@10",
+        "ndcg@10",
+        "precision@20",
+        "recall@20",
+        "ndcg@20"}
+
+    assert all(isinstance(value, float) for value in metrics.values())
+
+
+# evaluate() does not update model
+def test_evaluate_does_not_update_model(model, validation_data, criterion):
+    val_features, loader = validation_data
+
+    before = {
+        name: parameter.detach().clone()
+        for name, parameter in model.named_parameters()
+    }
+
+    evaluate(
+        model=model,
+        loader=loader,
+        criterion=criterion,
+        device=torch.device("cpu"),
+        val_features=val_features)
+
+    for name, parameter in model.named_parameters():
+        assert torch.equal(parameter, before[name])
+
+
+# evaluate() rejects single class targets
+def test_evaluate_rejects_single_class_targets(model, criterion):
+    numeric = torch.tensor([
+        [1.0, 0.0],
+        [0.0, 1.0]])
+    targets = torch.tensor([[1.0], [1.0]])
+
+    loader = DataLoader(
+        TensorDataset(numeric, targets),
+        batch_size=2,
+        shuffle=False)
+
+    val_features = pd.DataFrame({
+        "user_id": [1, 1],
+        "track_id": [10, 11],
+        "label": [1, 1]})
+
+    with pytest.raises(ValueError, match="both classes"):
+        evaluate(
+            model=model,
+            loader=loader,
+            criterion=criterion,
+            device=torch.device("cpu"),
+            val_features=val_features)

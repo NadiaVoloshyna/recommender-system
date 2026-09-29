@@ -8,6 +8,7 @@ from sklearn.metrics import roc_auc_score
 from training.preprocessing import transform_features
 from training.evaluation import evaluate_ranker
 from training.utils import plot_training_history
+from features.utils import validate_columns
 
 BATCH_SIZE = 256
 LEARNING_RATE = 0.001
@@ -41,7 +42,43 @@ def make_tensors(df: pd.DataFrame, scaler: StandardScaler):
     return numeric_features, labels
 
 
-def evaluate(model, loader, criterion, device, val_features):
+def evaluate(
+        model: torch.nn.Module,
+        loader: torch.utils.data.DataLoader,
+        criterion: torch.nn.Module,
+        device: torch.device,
+        val_features: pd.DataFrame
+) -> tuple[float, dict[str, float]]:
+    """
+    Evaluates a trained neural network on validation data.
+    The model is evaluated without updating its parameters. Validation loss and classification performance (AUC)
+    are calculated from the model's predictions. The predictions are also combined with user, track, and label
+    information to evaluate ranking performance at K=10 and K=20.
+    :param model: trained PyTorch neural network to evaluate
+    :param loader: DataLoader containing validation features and binary target labels (DataLoader)
+    :param criterion: PyTorch loss function used to calculate validation loss
+    :param device: device on which the model and validation tensors are evaluated (torch.device)
+    :param val_features: validation dataframe containing `user_id`, `track_id`, and `label` columns (pd.DataFrame)
+    :return:
+    """
+    if not isinstance(model, torch.nn.Module):
+        raise TypeError("model must be a torch.nn.Module")
+
+    if not isinstance(loader, torch.utils.data.DataLoader):
+        raise TypeError("loader must be a torch.utils.data.DataLoader")
+
+    if not isinstance(criterion, torch.nn.Module):
+        raise TypeError("criterion must be a torch.nn.Module")
+
+    if not isinstance(device, torch.device):
+        raise TypeError("device must be a torch.device")
+
+    if not isinstance(val_features, pd.DataFrame):
+        raise TypeError("val_features must be a pandas DataFrame")
+
+    required_columns = ["user_id", "track_id", "label"]
+    validate_columns(val_features, required_columns, "val_features")
+
     model.eval()
 
     total_val_loss = 0
@@ -63,6 +100,10 @@ def evaluate(model, loader, criterion, device, val_features):
     logits = torch.cat(logits_list)
     probs = torch.sigmoid(logits)
     targets = torch.cat(targets_list)
+    if len(torch.unique(targets)) < 2:
+        raise ValueError(
+            "Validation targets must contain both classes to calculate ROC AUC"
+        )
 
     avg_val_loss = total_val_loss / len(targets)
     auc = roc_auc_score(targets.numpy(), probs.numpy())
