@@ -2,11 +2,15 @@ from training.negative_sampling import add_candidate_hardness_scores, HARDNESS_F
 from training.preprocessing import fit_transform_features, transform_features, COLUMNS_TO_DROP, COLUMNS_TO_SCALE
 from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
 from training.train_baseline import train_baseline
+import training.train_nn as train_nn_module
+from training.train_nn import train_nn, NN
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 import pytest
+import copy
+import torch
 
 
 def make_candidate_df():
@@ -465,7 +469,9 @@ def test_train_baseline_rejects_invalid_input(train_data, val_data):
 
 
 # train_baseline() returns expected objects
-def test_train_baseline_returns_expected_objects(train_data, val_data):
+def test_train_baseline_returns_expected_objects(train_data, val_data, monkeypatch):
+    monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
+
     model, scaler, metrics, selected_source = train_baseline(
         train_data,
         train_data,
@@ -478,13 +484,12 @@ def test_train_baseline_returns_expected_objects(train_data, val_data):
 
 
 # train_baseline() returns all metrics
-def test_train_baseline_returns_all_metrics(train_data, val_data):
-    _, _, metrics, _ = train_baseline(
+def test_train_baseline_returns_all_metrics(train_data, val_data, monkeypatch):
+    monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
+    _, _, metrics, selected_model = train_baseline(
         train_data,
         train_data,
         val_data)
-
-    assert set(metrics.keys()) == {"full", "sampled"}
 
     expected_metrics = {
         "auc",
@@ -495,5 +500,91 @@ def test_train_baseline_returns_all_metrics(train_data, val_data):
         "recall@20",
         "ndcg@20"}
 
-    assert set(metrics["full"].keys()) == expected_metrics
-    assert set(metrics["sampled"].keys()) == expected_metrics
+    assert selected_model in {"FULL", "SAMPLED"}
+    assert set(metrics.keys()) == expected_metrics
+
+
+@pytest.fixture
+def scaler(train_data):
+    scaler = StandardScaler()
+    scaler.fit(train_data[COLUMNS_TO_SCALE])
+    return scaler
+
+
+# train_nn() returns the correct outputs
+def test_train_nn_returns_model_and_metrics(
+    train_data,
+    val_data,
+    scaler,
+    monkeypatch
+):
+    monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
+
+    model, metrics = train_nn(train_data, val_data, scaler)
+
+    assert isinstance(model, NN)
+    assert isinstance(metrics, dict)
+
+
+# train_nn() returns expected metrics
+def test_train_nn_returns_expected_metrics(
+    train_data,
+    val_data,
+    scaler,
+    monkeypatch
+):
+    monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
+
+    model, metrics = train_nn(train_data, val_data, scaler)
+
+    expected_metrics = {
+        "auc",
+        "precision@10",
+        "recall@10",
+        "ndcg@10",
+        "precision@20",
+        "recall@20",
+        "ndcg@20",
+    }
+
+    assert expected_metrics.issubset(metrics.keys())
+
+
+# train_nn() selects best ndcg10
+def test_train_nn_selects_best_ndcg10(
+    train_data,
+    val_data,
+    scaler,
+    monkeypatch
+):
+    monkeypatch.setattr(train_nn_module, "EPOCHS", 3)
+    monkeypatch.setattr(
+        train_nn_module,
+        "plot_training_history",
+        lambda history: None)
+
+    ndcg_values = [0.30, 0.50, 0.40]
+
+    def mock_evaluate(*args, **kwargs):
+        ndcg = ndcg_values.pop(0)
+        metrics = {
+            "auc": 0.80,
+            "precision@10": 0.50,
+            "recall@10": 0.40,
+            "ndcg@10": ndcg,
+            "precision@20": 0.45,
+            "recall@20": 0.50,
+            "ndcg@20": 0.45,
+        }
+        return 0.5, metrics
+
+    monkeypatch.setattr(
+        train_nn_module,
+        "evaluate",
+        mock_evaluate)
+
+    model, metrics = train_nn(train_data, val_data, scaler)
+
+    assert isinstance(model, NN)
+    # Epoch 2 had the highest NDCG@10.
+    assert metrics["ndcg@10"] == 0.50

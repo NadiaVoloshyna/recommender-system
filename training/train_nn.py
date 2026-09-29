@@ -90,6 +90,31 @@ def train_nn(
         val_features: pd.DataFrame,
         scaler: StandardScaler
 ) -> tuple[NN, dict]:
+    """
+    Trains a binary-classification neural network, evaluates its ranking performance on validation data after
+    every epoch, saves the version with the highest NDCG@10, restores that version at the end, plots training progress,
+    and returns the best model and its metrics.
+    :param sampled_train_features:training dataset containing the engineered ranking features and binary labels
+    after negative sampling (pd.DataFrame)
+    :param val_features: validation dataset containing the same engineered ranking features and
+    binary labels (pd.DataFrame)
+    :param scaler: fitted scaler used to standardize the selected numerical features (StandardScaler)
+    :return:
+        tuple[NN, dict]: the neural network restored to the epoch with the highest NDCG@10,
+        and a dictionary containing the evaluation metrics for that model.
+    """
+    if not isinstance(sampled_train_features, pd.DataFrame):
+        raise TypeError("sampled_train_features must be a pandas DataFrame")
+
+    if not isinstance(val_features, pd.DataFrame):
+        raise TypeError("val_features must be a pandas DataFrame")
+
+    if sampled_train_features.empty:
+        raise ValueError("Training dataset is empty")
+
+    if val_features.empty:
+        raise ValueError("Validation dataset is empty")
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     train_tensors = make_tensors(sampled_train_features, scaler)
