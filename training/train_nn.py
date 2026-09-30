@@ -228,7 +228,7 @@ def train_nn(
 
     # Restore best model
     model.load_state_dict(best_state)
-    plot_training_history(history)
+    # plot_training_history(history)
 
     return model, best_metrics
 

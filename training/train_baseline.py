@@ -112,7 +112,7 @@ def train_baseline(
         "Sampled": metrics["sampled"]
     }
 
-    plot_model_comparison(comparison, "Logistic Regression Baseline Comparison")
+    # plot_model_comparison(comparison, "Logistic Regression Baseline Comparison")
 
     # Select model based on NDCG@10
     if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:

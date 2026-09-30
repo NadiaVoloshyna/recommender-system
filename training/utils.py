@@ -25,7 +25,7 @@ def plot_model_comparison(metrics: dict, title):
 
     models = list(metrics.keys())
     x = np.arange(len(labels))
-    width = 0.34
+    width = 0.25
     fig, ax = plt.subplots(figsize=(11, 6))
     colours = ["#4C78A8", "#F58518", "#54A24B", "#E45756"]
 
