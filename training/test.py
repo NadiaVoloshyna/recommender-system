@@ -4,10 +4,12 @@ from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
 from training.train_baseline import train_baseline
 import training.train_nn as train_nn_module
 from training.train_nn import train_nn, NN, evaluate
+from training.train_gbm import train_gbm
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+from lightgbm import LGBMClassifier
 import pytest
 import torch
 from torch import nn
@@ -707,3 +709,45 @@ def test_evaluate_rejects_single_class_targets(model, criterion):
             criterion=criterion,
             device=torch.device("cpu"),
             val_features=val_features)
+
+
+# train_gbm() is trained
+def test_train_gbm_returns_model(train_data, val_data):
+    model, metrics = train_gbm(train_data, val_data)
+
+    assert isinstance(model, LGBMClassifier)
+
+
+# train_gbm() returns metrics
+def test_train_gbm_returns_metrics(train_data, val_data):
+    _, metrics = train_gbm(train_data, val_data)
+
+    expected = {
+        "auc",
+        "precision@10",
+        "recall@10",
+        "ndcg@10",
+        "precision@20",
+        "recall@20",
+        "ndcg@20",
+    }
+
+    assert set(metrics.keys()) == expected
+
+
+# train_gbm() returns valid metrics
+def test_train_gbm_metrics_are_valid(train_data, val_data):
+    _, metrics = train_gbm(train_data, val_data)
+
+    assert 0 <= metrics["auc"] <= 1
+
+    for metric in [
+        "precision@10",
+        "recall@10",
+        "ndcg@10",
+        "precision@20",
+        "recall@20",
+        "ndcg@20",
+    ]:
+        assert 0 <= metrics[metric] <= 1
+
