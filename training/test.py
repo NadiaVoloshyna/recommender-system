@@ -523,7 +523,7 @@ def test_train_nn_returns_model_and_metrics(
 ):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
 
-    model, metrics = train_nn(train_data, val_data, scaler)
+    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
 
     assert isinstance(model, NN)
     assert isinstance(metrics, dict)
@@ -538,7 +538,7 @@ def test_train_nn_returns_expected_metrics(
 ):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
 
-    model, metrics = train_nn(train_data, val_data, scaler)
+    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
 
     expected_metrics = {
         "auc",
@@ -586,7 +586,7 @@ def test_train_nn_selects_best_ndcg10(
         "evaluate",
         mock_evaluate)
 
-    model, metrics = train_nn(train_data, val_data, scaler)
+    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
 
     assert isinstance(model, NN)
     # Epoch 2 had the highest NDCG@10.

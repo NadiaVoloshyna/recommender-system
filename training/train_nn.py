@@ -9,9 +9,10 @@ from training.preprocessing import transform_features
 from training.evaluation import evaluate_ranker
 from training.utils import plot_training_history
 from features.utils import validate_columns
+import matplotlib.pyplot as plt
 
 BATCH_SIZE = 256
-LEARNING_RATE = 0.001
+LEARNING_RATE = 0.01
 EPOCHS = 10
 
 
@@ -59,7 +60,10 @@ def evaluate(
     :param criterion: PyTorch loss function used to calculate validation loss
     :param device: device on which the model and validation tensors are evaluated (torch.device)
     :param val_features: validation dataframe containing `user_id`, `track_id`, and `label` columns (pd.DataFrame)
-    :return:
+    :return: tuple[float, dict]:
+        avg_val_loss: average validation loss across all validation samples (float)
+        metrics: dictionary containing AUC, Precision@10, Recall@10, NDCG@10, Precision@20, Recall@20,
+        and NDCG@20 (dict)
     """
     if not isinstance(model, torch.nn.Module):
         raise TypeError("model must be a torch.nn.Module")
@@ -130,19 +134,22 @@ def train_nn(
         sampled_train_features: pd.DataFrame,
         val_features: pd.DataFrame,
         scaler: StandardScaler
-) -> tuple[NN, dict]:
+) -> tuple[NN, dict, int, torch.nn.Module, torch.device]:
     """
     Trains a binary-classification neural network, evaluates its ranking performance on validation data after
-    every epoch, saves the version with the highest NDCG@10, restores that version at the end, plots training progress,
-    and returns the best model and its metrics.
+    every epoch, saves the model state from the epoch with the highest validation NDCG@10, restores that version
+    at the end, and returns the best model and its metrics.
     :param sampled_train_features:training dataset containing the engineered ranking features and binary labels
     after negative sampling (pd.DataFrame)
     :param val_features: validation dataset containing the same engineered ranking features and
     binary labels (pd.DataFrame)
     :param scaler: fitted scaler used to standardize the selected numerical features (StandardScaler)
-    :return:
-        tuple[NN, dict]: the neural network restored to the epoch with the highest NDCG@10,
-        and a dictionary containing the evaluation metrics for that model.
+    :return: tuple[NN, dict, int, torch.nn.Module, torch.device]:
+        the neural network restored to the epoch with the highest NDCG@10,
+        a dictionary containing the evaluation metrics for that model,
+        the best epoch,
+        the loss function used during training,
+        and the device on which the model was trained.
     """
     if not isinstance(sampled_train_features, pd.DataFrame):
         raise TypeError("sampled_train_features must be a pandas DataFrame")
@@ -172,7 +179,7 @@ def train_nn(
 
     best_ndcg = float("-inf")
     best_state = copy.deepcopy(model.state_dict())
-    best_metrics = None
+    best_metrics = {}
     history = {
         "train_loss": [],
         "val_loss": [],
@@ -180,6 +187,7 @@ def train_nn(
         "ndcg@10": [],
         "ndcg@20": [],
     }
+    best_epoch = 0
 
     for epoch in range(EPOCHS):
         model.train()
@@ -206,6 +214,7 @@ def train_nn(
             best_ndcg = metrics["ndcg@10"]
             best_state = copy.deepcopy(model.state_dict())
             best_metrics = metrics.copy()
+            best_epoch = epoch + 1
 
         print(
             f"Epoch {epoch + 1}/{EPOCHS}   "
@@ -230,10 +239,59 @@ def train_nn(
     model.load_state_dict(best_state)
     # plot_training_history(history)
 
-    return model, best_metrics
+    return model, best_metrics, best_epoch, criterion, device
 
 
+def train_final_nn(
+    train_features: pd.DataFrame,
+    scaler: StandardScaler,
+    epochs: int
+) -> NN:
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    train_tensors = make_tensors(train_features, scaler)
+    n_numeric = train_tensors[0].shape[1]
+    train_loader = DataLoader(TensorDataset(*train_tensors), batch_size=BATCH_SIZE, shuffle=True)
 
+    model = NN(n_numeric=n_numeric).to(device)
 
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
+    train_losses = []
+
+    for epoch in range(epochs):
+        model.train()
+        total_train_loss = 0.0
+
+        for numeric, targets in train_loader:
+            numeric = numeric.to(device)
+            targets = targets.to(device)
+
+            optimizer.zero_grad()
+
+            logits = model(numeric)
+            loss = criterion(logits, targets)
+
+            loss.backward()
+            optimizer.step()
+
+            total_train_loss += loss.item() * len(targets)
+
+        avg_train_loss = total_train_loss / len(train_tensors[0])
+        train_losses.append(avg_train_loss)
+
+        print(
+            f"Epoch {epoch + 1}/{epochs} "
+            f"train_loss={avg_train_loss:.4f}"
+        )
+
+    plt.figure(figsize=(8, 5))
+    plt.plot(list(range(1, epochs + 1)), train_losses)
+    plt.xlabel("Epoch")
+    plt.ylabel("Training Loss")
+    plt.title("Final Neural Network Training Loss")
+    plt.grid(True)
+    plt.show()
+
+    return model

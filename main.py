@@ -192,12 +192,6 @@ def main():
     # Train final model
     final_model = run_training_pipeline()
 
-    # Validate
-    # evaluate_model(model, val_feature_df)
-
-    # Final test
-    # evaluate_model(model, test_feature_df)
-
 
 if __name__ == "__main__":
     main()
