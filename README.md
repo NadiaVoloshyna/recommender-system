@@ -26,3 +26,5 @@ Current progress:
 •	Baseline vs Neural Network ranking experiments completed
 
 •	Model comparison and visualization implemented
+
+•	Final Neural Network training pipeline implemented using the combined training and validation data
