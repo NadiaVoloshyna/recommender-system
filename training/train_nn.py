@@ -5,14 +5,16 @@ import copy
 from torch.utils.data import TensorDataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
-from training.preprocessing import transform_features
+from training.preprocessing import fit_transform_features, transform_features
 from training.evaluation import evaluate_ranker
 from training.utils import plot_training_history
 from features.utils import validate_columns
+from training.negative_sampling import add_candidate_hardness_scores, sample_negatives_by_hardness
 import matplotlib.pyplot as plt
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 BATCH_SIZE = 256
-LEARNING_RATE = 0.01
+LEARNING_RATE = 0.001
 EPOCHS = 10
 
 
@@ -34,20 +36,28 @@ class NN(nn.Module):
         return self.ranking_mlp(numeric_features).squeeze(1)
 
 
-def make_tensors(df: pd.DataFrame, scaler: StandardScaler):
-    numeric_features = transform_features(df, scaler)
-    numeric_features = torch.tensor(numeric_features.to_numpy(), dtype=torch.float32)
+def make_tensors(df: pd.DataFrame, scaler=None):
+    if scaler is None:
+        numeric_features, scaler = fit_transform_features(df)
+    else:
+        numeric_features = transform_features(df, scaler)
 
-    labels = torch.tensor(df["label"].to_numpy(), dtype=torch.float32)
+    numeric_features = torch.tensor(
+        numeric_features.to_numpy(),
+        dtype=torch.float32
+    )
 
-    return numeric_features, labels
+    labels = torch.tensor(
+        df["label"].to_numpy(),
+        dtype=torch.float32
+    )
+
+    return (numeric_features, labels), scaler
 
 
 def evaluate(
         model: torch.nn.Module,
-        loader: torch.utils.data.DataLoader,
-        criterion: torch.nn.Module,
-        device: torch.device,
+        val_loader: torch.utils.data.DataLoader,
         val_features: pd.DataFrame
 ) -> tuple[float, dict[str, float]]:
     """
@@ -56,8 +66,7 @@ def evaluate(
     are calculated from the model's predictions. The predictions are also combined with user, track, and label
     information to evaluate ranking performance at K=10 and K=20.
     :param model: trained PyTorch neural network to evaluate
-    :param loader: DataLoader containing validation features and binary target labels (DataLoader)
-    :param criterion: PyTorch loss function used to calculate validation loss
+    :param val_loader: DataLoader containing validation features and binary target labels (DataLoader)
     :param device: device on which the model and validation tensors are evaluated (torch.device)
     :param val_features: validation dataframe containing `user_id`, `track_id`, and `label` columns (pd.DataFrame)
     :return: tuple[float, dict]:
@@ -68,14 +77,8 @@ def evaluate(
     if not isinstance(model, torch.nn.Module):
         raise TypeError("model must be a torch.nn.Module")
 
-    if not isinstance(loader, torch.utils.data.DataLoader):
+    if not isinstance(val_loader, torch.utils.data.DataLoader):
         raise TypeError("loader must be a torch.utils.data.DataLoader")
-
-    if not isinstance(criterion, torch.nn.Module):
-        raise TypeError("criterion must be a torch.nn.Module")
-
-    if not isinstance(device, torch.device):
-        raise TypeError("device must be a torch.device")
 
     if not isinstance(val_features, pd.DataFrame):
         raise TypeError("val_features must be a pandas DataFrame")
@@ -84,15 +87,16 @@ def evaluate(
     validate_columns(val_features, required_columns, "val_features")
 
     model.eval()
+    criterion = nn.BCEWithLogitsLoss()
 
     total_val_loss = 0
     logits_list = []
     targets_list = []
 
     with torch.no_grad():
-        for numeric, targets in loader:
-            numeric = numeric.to(device)
-            targets = targets.to(device)
+        for numeric, targets in val_loader:
+            numeric = numeric.to(DEVICE)
+            targets = targets.to(DEVICE)
 
             logits = model(numeric)
             loss = criterion(logits, targets)
@@ -110,11 +114,11 @@ def evaluate(
         )
 
     avg_val_loss = total_val_loss / len(targets)
+
     auc = roc_auc_score(targets.numpy(), probs.numpy())
 
     val_results = val_features[["user_id", "track_id", "label"]].copy()
     val_results["score"] = probs.numpy()
-
     ranking_results = evaluate_ranker(val_results, ks=[10, 20])
 
     metrics = {
@@ -130,11 +134,40 @@ def evaluate(
     return avg_val_loss, metrics
 
 
+def train_one_epoch(
+        model: NN,
+        train_loader: DataLoader,
+        criterion: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        device: torch.device
+) -> float:
+    model.train()
+
+    total_train_loss = 0.0
+    total_samples = 0
+
+    for numeric, targets in train_loader:
+        numeric = numeric.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+
+        logits = model(numeric)
+        loss = criterion(logits, targets)
+
+        loss.backward()
+        optimizer.step()
+
+        total_train_loss += loss.item() * BATCH_SIZE
+        total_samples += BATCH_SIZE
+
+    return total_train_loss / total_samples
+
+
 def train_nn(
         sampled_train_features: pd.DataFrame,
-        val_features: pd.DataFrame,
-        scaler: StandardScaler
-) -> tuple[NN, dict, int, torch.nn.Module, torch.device]:
+        val_features: pd.DataFrame
+) -> tuple[NN, dict, int]:
     """
     Trains a binary-classification neural network, evaluates its ranking performance on validation data after
     every epoch, saves the model state from the epoch with the highest validation NDCG@10, restores that version
@@ -143,13 +176,10 @@ def train_nn(
     after negative sampling (pd.DataFrame)
     :param val_features: validation dataset containing the same engineered ranking features and
     binary labels (pd.DataFrame)
-    :param scaler: fitted scaler used to standardize the selected numerical features (StandardScaler)
     :return: tuple[NN, dict, int, torch.nn.Module, torch.device]:
         the neural network restored to the epoch with the highest NDCG@10,
         a dictionary containing the evaluation metrics for that model,
-        the best epoch,
-        the loss function used during training,
-        and the device on which the model was trained.
+        the best epoch.
     """
     if not isinstance(sampled_train_features, pd.DataFrame):
         raise TypeError("sampled_train_features must be a pandas DataFrame")
@@ -163,10 +193,10 @@ def train_nn(
     if val_features.empty:
         raise ValueError("Validation dataset is empty")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = DEVICE
 
-    train_tensors = make_tensors(sampled_train_features, scaler)
-    val_tensors = make_tensors(val_features, scaler)
+    train_tensors, scaler = make_tensors(sampled_train_features)
+    val_tensors, _ = make_tensors(val_features, scaler)
     n_numeric = train_tensors[0].shape[1]
 
     train_loader = DataLoader(TensorDataset(*train_tensors), batch_size=BATCH_SIZE, shuffle=True)
@@ -190,26 +220,20 @@ def train_nn(
     best_epoch = 0
 
     for epoch in range(EPOCHS):
-        model.train()
-        total_train_loss = 0
+        avg_train_loss = train_one_epoch(
+                    model,
+                    train_loader,
+                    criterion,
+                    optimizer,
+                    device
+                )
 
-        for numeric, targets in train_loader:
-            numeric = numeric.to(device)
-            targets = targets.to(device)
+        val_loss, metrics = evaluate(
+            model,
+            val_loader,
+            val_features
+        )
 
-            optimizer.zero_grad()
-
-            logits = model(numeric)
-            loss = criterion(logits, targets)
-
-            loss.backward()
-            optimizer.step()
-
-            total_train_loss += (loss.item() * len(targets))
-
-        avg_train_loss = total_train_loss / len(train_tensors[0])
-
-        val_loss, metrics = evaluate(model, val_loader, criterion, device, val_features)
         if metrics["ndcg@10"] > best_ndcg:
             best_ndcg = metrics["ndcg@10"]
             best_state = copy.deepcopy(model.state_dict())
@@ -237,19 +261,29 @@ def train_nn(
 
     # Restore best model
     model.load_state_dict(best_state)
-    # plot_training_history(history)
+    plot_training_history(history)
 
-    return model, best_metrics, best_epoch, criterion, device
+    return model, best_metrics, best_epoch
 
 
 def train_final_nn(
-    train_features: pd.DataFrame,
-    scaler: StandardScaler,
-    epochs: int
-) -> NN:
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    full_train_features: pd.DataFrame,
+    val_features: pd.DataFrame,
+    epochs: int,
+) -> tuple[NN, StandardScaler]:
+    device = DEVICE
 
-    train_tensors = make_tensors(train_features, scaler)
+    final_train_features = pd.concat([full_train_features, val_features], ignore_index=True)
+    final_train_features = add_candidate_hardness_scores(final_train_features, user_col="user_id")
+    final_train_features = sample_negatives_by_hardness(
+        final_train_features,
+        negatives_per_positive=10,
+        user_col="user_id",
+        label_col="label",
+        random_state=42
+    )
+
+    train_tensors, scaler = make_tensors(final_train_features)
     n_numeric = train_tensors[0].shape[1]
     train_loader = DataLoader(TensorDataset(*train_tensors), batch_size=BATCH_SIZE, shuffle=True)
 
@@ -261,24 +295,14 @@ def train_final_nn(
     train_losses = []
 
     for epoch in range(epochs):
-        model.train()
-        total_train_loss = 0.0
+        avg_train_loss = train_one_epoch(
+                    model,
+                    train_loader,
+                    criterion,
+                    optimizer,
+                    device
+                )
 
-        for numeric, targets in train_loader:
-            numeric = numeric.to(device)
-            targets = targets.to(device)
-
-            optimizer.zero_grad()
-
-            logits = model(numeric)
-            loss = criterion(logits, targets)
-
-            loss.backward()
-            optimizer.step()
-
-            total_train_loss += loss.item() * len(targets)
-
-        avg_train_loss = total_train_loss / len(train_tensors[0])
         train_losses.append(avg_train_loss)
 
         print(
@@ -294,4 +318,4 @@ def train_final_nn(
     plt.grid(True)
     plt.show()
 
-    return model
+    return model, scaler

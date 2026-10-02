@@ -475,13 +475,12 @@ def test_train_baseline_rejects_invalid_input(train_data, val_data):
 def test_train_baseline_returns_expected_objects(train_data, val_data, monkeypatch):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
 
-    model, scaler, metrics, selected_source = train_baseline(
+    model, metrics, selected_source = train_baseline(
         train_data,
         train_data,
         val_data)
 
     assert isinstance(model, LogisticRegression)
-    assert isinstance(scaler, StandardScaler)
     assert isinstance(metrics, dict)
     assert isinstance(selected_source, str)
 
@@ -489,7 +488,7 @@ def test_train_baseline_returns_expected_objects(train_data, val_data, monkeypat
 # train_baseline() returns all metrics
 def test_train_baseline_returns_all_metrics(train_data, val_data, monkeypatch):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
-    _, _, metrics, selected_model = train_baseline(
+    _, metrics, selected_model = train_baseline(
         train_data,
         train_data,
         val_data)
@@ -507,23 +506,15 @@ def test_train_baseline_returns_all_metrics(train_data, val_data, monkeypatch):
     assert set(metrics.keys()) == expected_metrics
 
 
-@pytest.fixture
-def scaler(train_data):
-    scaler = StandardScaler()
-    scaler.fit(train_data[COLUMNS_TO_SCALE])
-    return scaler
-
-
 # train_nn() returns the correct outputs
 def test_train_nn_returns_model_and_metrics(
     train_data,
     val_data,
-    scaler,
     monkeypatch
 ):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
 
-    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
+    model, metrics, _ = train_nn(train_data, val_data)
 
     assert isinstance(model, NN)
     assert isinstance(metrics, dict)
@@ -533,12 +524,11 @@ def test_train_nn_returns_model_and_metrics(
 def test_train_nn_returns_expected_metrics(
     train_data,
     val_data,
-    scaler,
     monkeypatch
 ):
     monkeypatch.setattr("matplotlib.pyplot.show", lambda: None)
 
-    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
+    model, metrics, _ = train_nn(train_data, val_data)
 
     expected_metrics = {
         "auc",
@@ -557,7 +547,6 @@ def test_train_nn_returns_expected_metrics(
 def test_train_nn_selects_best_ndcg10(
     train_data,
     val_data,
-    scaler,
     monkeypatch
 ):
     monkeypatch.setattr(train_nn_module, "EPOCHS", 3)
@@ -586,7 +575,7 @@ def test_train_nn_selects_best_ndcg10(
         "evaluate",
         mock_evaluate)
 
-    model, metrics, _, _, _ = train_nn(train_data, val_data, scaler)
+    model, metrics, _ = train_nn(train_data, val_data)
 
     assert isinstance(model, NN)
     # Epoch 2 had the highest NDCG@10.
@@ -633,21 +622,14 @@ def model():
     return DummyModel()
 
 
-@pytest.fixture
-def criterion():
-    return nn.BCEWithLogitsLoss()
-
-
 # evaluate() returns loss and metrics
-def test_evaluate_returns_loss_and_metrics(model, validation_data, criterion):
+def test_evaluate_returns_loss_and_metrics(model, validation_data):
     val_features, loader = validation_data
 
     loss, metrics = evaluate(
         model=model,
-        loader=loader,
-        criterion=criterion,
-        device=torch.device("cpu"),
-        val_features=val_features,
+        val_loader=loader,
+        val_features=val_features
     )
 
     assert isinstance(loss, float)
@@ -666,7 +648,7 @@ def test_evaluate_returns_loss_and_metrics(model, validation_data, criterion):
 
 
 # evaluate() does not update model
-def test_evaluate_does_not_update_model(model, validation_data, criterion):
+def test_evaluate_does_not_update_model(model, validation_data):
     val_features, loader = validation_data
 
     before = {
@@ -676,9 +658,7 @@ def test_evaluate_does_not_update_model(model, validation_data, criterion):
 
     evaluate(
         model=model,
-        loader=loader,
-        criterion=criterion,
-        device=torch.device("cpu"),
+        val_loader=loader,
         val_features=val_features)
 
     for name, parameter in model.named_parameters():
@@ -686,7 +666,7 @@ def test_evaluate_does_not_update_model(model, validation_data, criterion):
 
 
 # evaluate() rejects single class targets
-def test_evaluate_rejects_single_class_targets(model, criterion):
+def test_evaluate_rejects_single_class_targets(model):
     numeric = torch.tensor([
         [1.0, 0.0],
         [0.0, 1.0]])
@@ -705,9 +685,7 @@ def test_evaluate_rejects_single_class_targets(model, criterion):
     with pytest.raises(ValueError, match="both classes"):
         evaluate(
             model=model,
-            loader=loader,
-            criterion=criterion,
-            device=torch.device("cpu"),
+            val_loader=loader,
             val_features=val_features)
 
 

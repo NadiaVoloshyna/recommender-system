@@ -5,6 +5,7 @@ from training.train_nn import train_nn, train_final_nn, make_tensors, evaluate
 from training.train_gbm import train_gbm
 from training.utils import plot_model_comparison
 from torch.utils.data import TensorDataset, DataLoader
+import torch.nn as nn
 
 
 def run_training_pipeline():
@@ -15,7 +16,7 @@ def run_training_pipeline():
     test_features = pd.read_parquet(TEST_FEATURES)
 
     # ==================== BASELINE ====================
-    baseline_model, baseline_scaler, baseline_metrics, baseline_source = train_baseline(
+    baseline_model, baseline_metrics, baseline_source = train_baseline(
         full_train_features,
         sampled_train_features,
         val_features
@@ -24,11 +25,8 @@ def run_training_pipeline():
 
     # ==================== NEURAL NETWORK ====================
     print("====== Training Neural Network model ======\n")
-    nn_model, nn_metrics, best_epoch, criterion, device = train_nn(
-        sampled_train_features,
-        val_features,
-        baseline_scaler
-    )
+    nn_model, nn_metrics, best_epoch = train_nn(sampled_train_features, val_features)
+
     print(f"\nSelected epoch: {best_epoch}")
     print(f"Best NDCG@10: {nn_metrics['ndcg@10']:.4f}\n")
 
@@ -50,22 +48,14 @@ def run_training_pipeline():
 
     # ==================== FINAL MODEL ====================
     print("\n====== Training Final Model ======")
-    combined_features = pd.concat([sampled_train_features, val_features], ignore_index=True)
+    final_model, final_scaler = train_final_nn(full_train_features, val_features, best_epoch)
 
-    final_model = train_final_nn(
-        train_features=combined_features,
-        scaler=baseline_scaler,
-        epochs=best_epoch
-    )
-
-    test_tensors = make_tensors(test_features, baseline_scaler)
+    test_tensors, _ = make_tensors(test_features, final_scaler)
     test_loader = DataLoader(TensorDataset(*test_tensors), batch_size=256, shuffle=False)
 
-    test_loss, test_metrics = evaluate(
+    _, test_metrics = evaluate(
         final_model,
         test_loader,
-        criterion,
-        device,
         test_features
     )
 

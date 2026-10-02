@@ -3,7 +3,6 @@ from training.preprocessing import fit_transform_features, transform_features
 from training.evaluation import evaluate_ranker
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score
-from sklearn.preprocessing import StandardScaler
 from training.utils import plot_model_comparison
 
 
@@ -11,7 +10,7 @@ def train_baseline(
         full_train_features: pd.DataFrame,
         sampled_train_features: pd.DataFrame,
         val_features: pd.DataFrame
-) -> tuple[LogisticRegression, StandardScaler, dict, str]:
+) -> tuple[LogisticRegression, dict, str]:
     """
     Train and compare two logistic-regression baseline models.
     The first model is trained on the full, highly imbalanced training dataset using class weighting.
@@ -27,8 +26,7 @@ def train_baseline(
     and binary labels (pd.DataFrame)
     :return:
         tuple[LogisticRegression, StandardScaler, dict, str]:
-            The selected logistic-regression model, the feature scaler fitted
-            on the corresponding training dataset, a dictionary containing the
+            The selected logistic-regression model, a dictionary containing the
             evaluation metrics for both baseline models, and a string identifying
             the selected model ("full" or "sampled").
     """
@@ -116,8 +114,8 @@ def train_baseline(
 
     # Select model based on NDCG@10
     if metrics["full"]["ndcg@10"] >= metrics["sampled"]["ndcg@10"]:
-        return model_full, scaler_full, metrics["full"], "FULL"
+        return model_full, metrics["full"], "FULL"
     else:
-        return model_sampled, scaler_sampled, metrics["sampled"], "SAMPLED"
+        return model_sampled, metrics["sampled"], "SAMPLED"
 
 
