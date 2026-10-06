@@ -271,6 +271,38 @@ def train_final_nn(
     val_features: pd.DataFrame,
     epochs: int,
 ) -> tuple[NN, StandardScaler]:
+    """
+    Trains the final neural network on all available development data.
+    Combines the training and validation datasets, applies the final data preparation and negative-sampling steps,
+    and trains a fresh neural network for the specified number of epochs. The validation data is no longer used for
+    evaluation at this stage; it is incorporated into the final training dataset after model selection and
+    hyperparameter tuning have been completed.
+    :param full_train_features: training dataset containing the engineered user-track features and binary labels,
+    with the original class distribution (pd.DataFrame)
+    :param val_features: validation dataset containing the engineered user-track features and binary labels.
+    These data are incorporated into the final training dataset (pd.DataFrame)
+    :param epochs: number of epochs for which to train the final model (int)
+    :return: tuple[NN, StandardScaler]: the trained neural network and the fitted scaler used to
+    standardize the selected numerical features.
+    """
+    if not isinstance(full_train_features, pd.DataFrame):
+        raise TypeError("full_train_features must be a pandas DataFrame")
+
+    if full_train_features.empty:
+        raise ValueError("full_train_features must not be empty")
+
+    if not isinstance(val_features, pd.DataFrame):
+        raise TypeError("val_features must be a pandas DataFrame")
+
+    if val_features.empty:
+        raise ValueError("val_features must not be empty")
+
+    if not isinstance(epochs, int):
+        raise TypeError("epochs must be an integer")
+
+    if epochs <= 0:
+        raise ValueError("epochs must be greater than 0")
+
     device = DEVICE
 
     final_train_features = pd.concat([full_train_features, val_features], ignore_index=True)

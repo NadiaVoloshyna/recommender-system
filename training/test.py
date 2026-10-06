@@ -3,7 +3,7 @@ from training.preprocessing import fit_transform_features, transform_features, C
 from training.evaluation import precision_at_k, recall_at_k, ndcg_at_k
 from training.train_baseline import train_baseline
 import training.train_nn as train_nn_module
-from training.train_nn import train_nn, NN, evaluate
+from training.train_nn import train_nn, NN, evaluate, train_final_nn
 from training.train_gbm import train_gbm
 import pandas as pd
 import numpy as np
@@ -728,4 +728,98 @@ def test_train_gbm_metrics_are_valid(train_data, val_data):
         "ndcg@20",
     ]:
         assert 0 <= metrics[metric] <= 1
+
+
+# train_final_nn() returns model and scaler
+def test_train_final_nn_returns_model_and_scaler(train_data, val_data, mocker):
+    mocker.patch("training.train_nn.add_candidate_hardness_scores", side_effect=lambda df, user_col: df)
+    mocker.patch("training.train_nn.sample_negatives_by_hardness", side_effect=lambda df, **kwargs: df)
+
+    X = torch.tensor([
+        [0.1],
+        [0.2],
+        [0.3],
+        [0.4],
+    ], dtype=torch.float32)
+
+    y = torch.tensor(
+        [1, 0, 1, 0],
+        dtype=torch.float32
+    )
+
+    scaler = StandardScaler()
+
+    mocker.patch("training.train_nn.make_tensors", return_value=((X, y), scaler))
+    mocker.patch("training.train_nn.train_one_epoch", return_value=0.5)
+    mocker.patch("training.train_nn.plot_training_history")
+
+    model, returned_scaler = train_final_nn(train_data, val_data, epochs=2)
+
+    assert isinstance(model, NN)
+    assert returned_scaler is scaler
+
+
+# train_final_nn() trains for requested epochs
+def test_train_final_nn_trains_for_requested_epochs(train_data, val_data, mocker):
+    mocker.patch("training.train_nn.add_candidate_hardness_scores", side_effect=lambda df, user_col: df)
+    mocker.patch("training.train_nn.sample_negatives_by_hardness", side_effect=lambda df, **kwargs: df)
+
+    X = torch.tensor([[0.1], [0.2]], dtype=torch.float32)
+    y = torch.tensor([1, 0], dtype=torch.float32)
+
+    mocker.patch("training.train_nn.make_tensors", return_value=((X, y), StandardScaler()))
+    train_one_epoch = mocker.patch("training.train_nn.train_one_epoch", return_value=0.5)
+    mocker.patch("training.train_nn.plot_training_history")
+
+    train_final_nn(train_data, val_data, epochs=5)
+
+    assert train_one_epoch.call_count == 5
+
+
+# train_final_nn() combines train and validation data
+def test_train_final_nn_combines_train_and_validation_data(train_data, val_data, mocker):
+    hardness = mocker.patch("training.train_nn.add_candidate_hardness_scores", side_effect=lambda df, user_col: df)
+    mocker.patch("training.train_nn.sample_negatives_by_hardness", side_effect=lambda df, **kwargs: df)
+
+    X = torch.tensor([
+        [0.1],
+        [0.2],
+        [0.3],
+        [0.4],
+    ], dtype=torch.float32)
+
+    y = torch.tensor([1, 0, 1, 0], dtype=torch.float32)
+
+    mocker.patch("training.train_nn.make_tensors", return_value=((X, y), StandardScaler()))
+    mocker.patch("training.train_nn.train_one_epoch", return_value=0.5)
+    mocker.patch("training.train_nn.plot_training_history")
+
+    train_final_nn(train_data, val_data, epochs=1)
+    combined = hardness.call_args.args[0]
+
+    assert set(combined["user_id"]) == {1, 2}
+    assert len(combined) == len(train_data) + len(val_data)
+
+
+# train_final_nn() passes the expected negative-sampling configuration
+def test_train_final_nn_uses_expected_negative_sampling(train_data, val_data, mocker):
+    mocker.patch("training.train_nn.add_candidate_hardness_scores", side_effect=lambda df, user_col: df)
+    sampler = mocker.patch("training.train_nn.sample_negatives_by_hardness", side_effect=lambda df, **kwargs: df)
+
+    X = torch.tensor([[0.1], [0.2]], dtype=torch.float32)
+    y = torch.tensor([1, 0], dtype=torch.float32)
+
+    mocker.patch("training.train_nn.make_tensors", return_value=((X, y), StandardScaler()))
+    mocker.patch("training.train_nn.train_one_epoch", return_value=0.5)
+    mocker.patch("training.train_nn.plot_training_history")
+
+    train_final_nn(train_data, val_data, epochs=1)
+
+    sampler.assert_called_once_with(
+        mocker.ANY,
+        negatives_per_positive=10,
+        user_col="user_id",
+        label_col="label",
+        random_state=42)
+
 
