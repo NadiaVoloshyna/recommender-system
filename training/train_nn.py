@@ -292,7 +292,7 @@ def train_final_nn(
     criterion = nn.BCEWithLogitsLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    train_losses = []
+    history = {"train_loss": []}
 
     for epoch in range(epochs):
         avg_train_loss = train_one_epoch(
@@ -303,19 +303,12 @@ def train_final_nn(
                     device
                 )
 
-        train_losses.append(avg_train_loss)
-
         print(
             f"Epoch {epoch + 1}/{epochs} "
             f"train_loss={avg_train_loss:.4f}"
         )
+        history["train_loss"].append(avg_train_loss)
 
-    plt.figure(figsize=(8, 5))
-    plt.plot(list(range(1, epochs + 1)), train_losses)
-    plt.xlabel("Epoch")
-    plt.ylabel("Training Loss")
-    plt.title("Final Neural Network Training Loss")
-    plt.grid(True)
-    plt.show()
+    plot_training_history(history)
 
     return model, scaler

@@ -92,31 +92,54 @@ def plot_model_comparison(metrics: dict, title):
 
 def plot_training_history(history):
     epochs = range(1, len(history["train_loss"]) + 1)
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 
-    axes[0].plot(epochs, history["train_loss"], marker="o", label="Train")
-    axes[0].plot(epochs, history["val_loss"], marker="o", label="Validation")
-    axes[0].set_title("Loss")
-    axes[0].set_xlabel("Epoch")
-    axes[0].set_ylabel("BCE loss")
-    axes[0].legend()
-    axes[0].grid(alpha=0.3)
+    has_val_loss = bool(history.get("val_loss"))
+    has_auc = bool(history.get("auc"))
+    has_ndcg = bool(history.get("ndcg@10"))
+    n_plots = 1 + has_auc + has_ndcg
 
-    axes[1].plot(epochs, history["auc"], marker="o", color="tab:green")
-    axes[1].set_title("Validation AUC")
-    axes[1].set_xlabel("Epoch")
-    axes[1].set_ylabel("AUC")
-    axes[1].grid(alpha=0.3)
+    fig, axes = plt.subplots(1, n_plots, figsize=(6 * n_plots, 5))
 
-    axes[2].plot(epochs, history["ndcg@10"], marker="o", label="NDCG@10")
-    axes[2].plot(epochs, history["ndcg@20"], marker="o", label="NDCG@20")
-    axes[2].set_title("Ranking quality")
-    axes[2].set_xlabel("Epoch")
-    axes[2].set_ylabel("NDCG")
-    axes[2].legend()
-    axes[2].grid(alpha=0.3)
+    if n_plots == 1:
+        axes = [axes]
+    plot_idx = 0
+
+    ax = axes[plot_idx]
+    ax.plot(epochs, history["train_loss"], marker="o", label="Train")
+
+    if has_val_loss:
+        ax.plot(epochs, history["val_loss"], marker="o", label="Validation")
+
+    ax.set_title("Loss")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("BCE Loss")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+    plot_idx += 1
+
+    if has_auc:
+        ax = axes[plot_idx]
+        ax.plot(epochs, history["auc"], marker="o", color="tab:green")
+        ax.set_title("Validation AUC")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("AUC")
+        ax.grid(alpha=0.3)
+
+        plot_idx += 1
+
+    if has_ndcg:
+        ax = axes[plot_idx]
+        ax.plot(epochs, history["ndcg@10"], marker="o", label="NDCG@10")
+
+        if "ndcg@20" in history and history["ndcg@20"]:
+            ax.plot(epochs, history["ndcg@20"], marker="o", label="NDCG@20")
+
+        ax.set_title("Ranking Quality")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("NDCG")
+        ax.legend()
+        ax.grid(alpha=0.3)
 
     plt.tight_layout()
     plt.show()
-
-
